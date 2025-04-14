@@ -1,0 +1,135 @@
+use ini::configparser::ini::Ini;
+use std::{
+    error::Error,
+    fs::{self},
+    path::{Path, PathBuf},
+};
+
+pub struct DeltaRepository {
+    pub worktree: PathBuf,
+    pub deltadir: PathBuf,
+    pub config: Option<Ini>,
+}
+
+impl DeltaRepository {
+    pub fn new(path: &Path, force: bool) -> Result<Self, Box<dyn Error>> {
+        let worktree = path.to_path_buf();
+        let deltadir = worktree.join(".delta");
+
+        if !force && !deltadir.is_dir() {
+            return Err(format!("Not a Delta repository: {}", path.display()).into());
+        }
+
+        let config = if force {
+            None
+        } else {
+            let config_path = deltadir.join("config");
+            if config_path.exists() {
+                let mut ini = Ini::new();
+                ini.load(config_path.to_str().unwrap())?;
+                Some(ini)
+            } else {
+                return Err("Config is missing".into());
+            }
+        };
+
+        if !force {
+            if let Some(ref config) = config {
+                match config.get("core", "repositoryformatversion").as_deref() {
+                    Some("0") => {}
+                    Some(v) => {
+                        return Err(format!("Unsupported repositoryformatversion: {}", v).into())
+                    }
+                    None => return Err("Missing repositoryformatversion".into()),
+                }
+            }
+        }
+
+        Ok(Self {
+            worktree,
+            deltadir,
+            config,
+        })
+    }
+
+    pub fn repo_path(&self, path: &[&str]) -> PathBuf {
+        path.iter()
+            .fold(self.deltadir.clone(), |acc, p| acc.join(p))
+    }
+
+    pub fn repo_file(&self, path: &[&str], mkdir: bool) -> Result<PathBuf, Box<dyn Error>> {
+        if mkdir {
+            let parent_path = &path[..path.len() - 1];
+            self.repo_dir(parent_path, mkdir)?;
+        }
+
+        Ok(self.repo_path(path))
+    }
+
+    pub fn repo_dir(&self, path: &[&str], mkdir: bool) -> Result<PathBuf, Box<dyn Error>> {
+        let path = self.repo_path(path);
+
+        if path.exists() {
+            if path.is_dir() {
+                return Ok(path);
+            } else {
+                return Err("Path exists but is not a directory".into());
+            }
+        }
+
+        if mkdir {
+            fs::create_dir_all(&path)?;
+            Ok(path)
+        } else {
+            Err("Directory does not exist".into())
+        }
+    }
+
+    pub fn repo_create(&self, path: PathBuf) -> Result<DeltaRepository, Box<dyn Error>> {
+        let repo = DeltaRepository::new(&path, true)?;
+
+        if repo.worktree.exists() {
+            if !repo.worktree.is_dir() {
+                return Err(format!("{} is not a directory", repo.worktree.display()).into());
+            } else if repo.deltadir.exists() && !repo.deltadir.is_dir() {
+                return Err(format!("{} is not a directory", repo.worktree.display()).into());
+            }
+        } else {
+            fs::create_dir_all(&repo.worktree)?;
+        }
+
+        repo.repo_dir(&["branches"], true)?;
+        repo.repo_dir(&["objects"], true)?;
+        repo.repo_dir(&["refs", "tags"], true)?;
+        repo.repo_dir(&["refs", "heads"], true)?;
+
+        let description_path = repo.repo_file(&["description"], true)?;
+        fs::write(
+            description_path,
+            "Unnamed repository; edit this file 'description' to name the repository.\n",
+        )?;
+
+        let head_path = repo.repo_file(&["HEAD"], false)?;
+        fs::write(head_path, "ref: refs/heads/master\n")?;
+
+        let config_path = repo.repo_file(&["config"], false)?;
+        let config = self.repo_default_config();
+        config.write(
+            config_path
+                .to_str()
+                .expect("Failed converting config path to string"),
+        )?;
+
+        Ok(repo)
+    }
+
+    pub fn repo_default_config(&self) -> Ini {
+        let mut config = Ini::new();
+
+        config.set("core", "repositoryformatversion", Some("0".to_string()));
+        config.set("core", "filemode", Some("false".to_string()));
+        config.set("core", "bare", Some("false".to_string()));
+
+        config
+    }
+}
