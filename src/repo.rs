@@ -132,4 +132,23 @@ impl DeltaRepository {
 
         config
     }
+
+    pub fn repo_find(path: PathBuf, throw_error: bool) -> Result<Option<Self>, Box<dyn Error>> {
+        if path.join(".delta").exists() {
+            return Ok(Some(Self::new(&path, false)?));
+        }
+
+        let parent = match path.parent() {
+            Some(path) => path.to_path_buf(),
+            None => {
+                if throw_error {
+                    return Err("No delta directory found".into());
+                } else {
+                    return Ok(None);
+                }
+            }
+        };
+
+        Self::repo_find(parent, throw_error)
+    }
 }
