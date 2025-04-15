@@ -91,8 +91,8 @@ impl DeltaRepository {
         if repo.worktree.exists() {
             if !repo.worktree.is_dir() {
                 return Err(format!("{} is not a directory", repo.worktree.display()).into());
-            } else if repo.deltadir.exists() && !repo.deltadir.is_dir() {
-                return Err(format!("{} is not a directory", repo.worktree.display()).into());
+            } else if repo.deltadir.exists() && fs::read_dir(&repo.deltadir)?.next().is_some() {
+                return Err(format!("{} is not empty", repo.worktree.display()).into());
             }
         } else {
             fs::create_dir_all(&repo.worktree)?;
@@ -126,9 +126,9 @@ impl DeltaRepository {
     pub fn repo_default_config(&self) -> Ini {
         let mut config = Ini::new();
 
-        config.set("core", "repositoryformatversion", Some("0".to_string()));
-        config.set("core", "filemode", Some("false".to_string()));
-        config.set("core", "bare", Some("false".to_string()));
+        config.setstr("core", "repositoryformatversion", Some("0"));
+        config.setstr("core", "filemode", Some("false"));
+        config.setstr("core", "bare", Some("false"));
 
         config
     }
