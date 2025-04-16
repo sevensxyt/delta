@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 pub mod cmd;
+pub mod object;
 pub mod repo;
 
 #[derive(Parser)]

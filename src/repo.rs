@@ -1,7 +1,13 @@
+use crate::object::{DeltaBlob, DeltaCommit, DeltaObject, DeltaTag, DeltaTree};
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use ini::configparser::ini::Ini;
+use sha1::{Digest, Sha1};
 use std::{
     error::Error,
-    fs::{self},
+    fs::{self, File},
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -17,7 +23,7 @@ impl DeltaRepository {
         let deltadir = worktree.join(".delta");
 
         if !force && !deltadir.is_dir() {
-            return Err(format!("Not a Delta repository: {}", path.display()).into());
+            return Err(format!("Not a delta repository: {}", path.display()).into());
         }
 
         let config = if force {
@@ -150,5 +156,86 @@ impl DeltaRepository {
         };
 
         Self::repo_find(parent, throw_error)
+    }
+
+    pub fn object_read(&self, sha: &str) -> Result<Option<Box<dyn DeltaObject>>, Box<dyn Error>> {
+        let path = self.repo_file(&["objects", &sha[0..2], &sha[2..]], false)?;
+
+        if !path.is_file() {
+            return Ok(None);
+        }
+
+        let mut file = File::open(path)?;
+        let mut compressed = Vec::new();
+        file.read_to_end(&mut compressed)?;
+
+        let raw = Self::decompress(&compressed)?;
+        let ascii_space_index = match raw.iter().position(|&b| b == b' ') {
+            Some(i) => i,
+            None => return Err("Invalid header: Missing ASCII space".into()),
+        };
+        let format = &raw[0..ascii_space_index];
+
+        let null_byte_index = match raw.iter().position(|&b| b == 0) {
+            Some(i) => i,
+            None => return Err("Invalid header: Missing null byte".into()),
+        };
+
+        let s = std::str::from_utf8(&raw[ascii_space_index..null_byte_index])?;
+        if s.parse::<usize>()? != raw.len() - null_byte_index - 1 {
+            return Err(format!("Malformed obejct {} bad length", sha).into());
+        }
+
+        let mut constructor: Box<dyn DeltaObject> = match format {
+            b"commit" => Box::new(DeltaCommit { data: vec![] }),
+            b"tree" => Box::new(DeltaTree { data: vec![] }),
+            b"tag" => Box::new(DeltaTag { data: vec![] }),
+            b"blob" => Box::new(DeltaBlob { data: vec![] }),
+            _ => {
+                return Err(format!(
+                    "Unknown type {} for object {}",
+                    std::str::from_utf8(format)?,
+                    sha
+                )
+                .into())
+            }
+        };
+
+        let content = &raw[null_byte_index + 1..];
+        constructor.deserialise(content)?;
+        Ok(Some(constructor))
+    }
+
+    fn object_write<T: DeltaObject>(&self, object: T) -> Result<String, Box<dyn Error>> {
+        let data = object.serialise()?;
+        let result: Vec<u8> = vec![
+            object.format(),
+            b" ",
+            format!("{}", data.len()).as_bytes(),
+            b"\x00",
+            &data,
+        ]
+        .iter()
+        .flat_map(|s| s.iter().copied())
+        .collect();
+        let sha = format!("{:x}", Sha1::digest(&result));
+
+        let path = Self::repo_file(&self, &["objects", &sha[0..2], &sha[2..]], true)?;
+        if !path.exists() {
+            let mut buffer = Vec::new();
+            let mut z = ZlibEncoder::new(&mut buffer, Compression::default());
+            z.write_all(&result)?;
+            z.finish()?;
+            std::fs::write(path, buffer)?;
+        }
+
+        Ok(sha)
+    }
+
+    fn decompress(data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut decoder = ZlibDecoder::new(data);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed)?;
+        Ok(decompressed)
     }
 }
