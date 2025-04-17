@@ -181,7 +181,7 @@ impl DeltaRepository {
             None => return Err("Invalid header: Missing null byte".into()),
         };
 
-        let s = std::str::from_utf8(&raw[ascii_space_index..null_byte_index])?;
+        let s = std::str::from_utf8(&raw[ascii_space_index + 1..null_byte_index])?;
         if s.parse::<usize>()? != raw.len() - null_byte_index - 1 {
             return Err(format!("Malformed obejct {} bad length", sha).into());
         }
@@ -206,30 +206,57 @@ impl DeltaRepository {
         Ok(Some(constructor))
     }
 
-    fn object_write<T: DeltaObject>(&self, object: T) -> Result<String, Box<dyn Error>> {
-        let data = object.serialise()?;
-        let result: Vec<u8> = vec![
-            object.format(),
-            b" ",
-            format!("{}", data.len()).as_bytes(),
-            b"\x00",
-            &data,
-        ]
-        .iter()
-        .flat_map(|s| s.iter().copied())
-        .collect();
-        let sha = format!("{:x}", Sha1::digest(&result));
-
+    fn object_write(&self, object: &dyn DeltaObject) -> Result<(), Box<dyn Error>> {
+        let (sha, payload) = Self::compute_object_hash(object)?;
         let path = Self::repo_file(&self, &["objects", &sha[0..2], &sha[2..]], true)?;
         if !path.exists() {
             let mut buffer = Vec::new();
             let mut z = ZlibEncoder::new(&mut buffer, Compression::default());
-            z.write_all(&result)?;
+            z.write_all(&payload)?;
             z.finish()?;
             std::fs::write(path, buffer)?;
         }
 
+        Ok(())
+    }
+
+    pub fn object_find(&self, name: String, format: String, follow: bool) -> String {
+        return name;
+    }
+
+    pub fn object_hash(
+        data: Vec<u8>,
+        format: &str,
+        repo: Option<DeltaRepository>,
+        write: bool,
+    ) -> Result<String, Box<dyn Error>> {
+        let object: Box<dyn DeltaObject> = match format {
+            "blob" => Box::new(DeltaBlob { data }),
+            "commit" => Box::new(DeltaCommit { data }),
+            "tag" => Box::new(DeltaTag { data }),
+            "tree" => Box::new(DeltaTree { data }),
+            _ => return Err("Invalid format".into()),
+        };
+        let (sha, _) = Self::compute_object_hash(&*object)?;
+
+        if write {
+            let repo = repo.ok_or("Unable to write without repository")?;
+            let _ = repo.object_write(&*object);
+        }
+
         Ok(sha)
+    }
+
+    fn compute_object_hash(object: &dyn DeltaObject) -> Result<(String, Vec<u8>), Box<dyn Error>> {
+        let data = object.serialise()?;
+        let header = format!(
+            "{} {}\x00",
+            std::str::from_utf8(object.format())?,
+            data.len()
+        );
+        let payload = [header.as_bytes(), &data].concat();
+        let sha = format!("{:x}", Sha1::digest(&payload));
+        Ok((sha, payload))
     }
 
     fn decompress(data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {

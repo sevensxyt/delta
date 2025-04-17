@@ -15,11 +15,25 @@ struct Args {
 #[derive(Subcommand)]
 pub enum Command {
     Add,
-    CatFile,
+    CatFile {
+        #[arg(name = "type", help = "Specify the type", value_parser = ["blob", "commit", "tag", "tree"])]
+        format: String,
+
+        #[arg(name = "object", help = "The object to display")]
+        object: String,
+    },
     CheckIgnore,
     Checkout,
     Commit,
-    HashObject,
+    HashObject {
+        path: PathBuf,
+
+        #[arg(short = 't', long = "type", default_value = "blob", value_parser = ["blob", "commit", "tag", "tree"])]
+        format: String,
+
+        #[arg(short = 'w', long = "write")]
+        write: bool,
+    },
     Init {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -39,11 +53,15 @@ pub fn main() {
 
     match args.command {
         Command::Add => cmd::add(),
-        Command::CatFile => cmd::cat_file(),
+        Command::CatFile { object, format } => cmd::cat_file(object, format),
         Command::CheckIgnore => cmd::check_ignore(),
         Command::Checkout => cmd::checkout(),
         Command::Commit => cmd::commit(),
-        Command::HashObject => cmd::hash_object(),
+        Command::HashObject {
+            path,
+            format,
+            write,
+        } => cmd::hash_object(path, format, write),
         Command::Init { path } => cmd::init(path),
         Command::Log => cmd::log(),
         Command::LsFiles => cmd::ls_files(),
