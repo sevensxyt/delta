@@ -1,7 +1,9 @@
+use crate::kvlm::kvlm_parse;
 use crate::object::{DeltaBlob, DeltaCommit, DeltaObject, DeltaTag, DeltaTree};
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use indexmap::IndexMap;
 use ini::configparser::ini::Ini;
 use sha1::{Digest, Sha1};
 use std::{
@@ -187,7 +189,9 @@ impl DeltaRepository {
         }
 
         let mut constructor: Box<dyn DeltaObject> = match format {
-            b"commit" => Box::new(DeltaCommit { data: vec![] }),
+            b"commit" => Box::new(DeltaCommit {
+                data: IndexMap::new(),
+            }),
             b"tree" => Box::new(DeltaTree { data: vec![] }),
             b"tag" => Box::new(DeltaTag { data: vec![] }),
             b"blob" => Box::new(DeltaBlob { data: vec![] }),
@@ -232,7 +236,9 @@ impl DeltaRepository {
     ) -> Result<String, Box<dyn Error>> {
         let object: Box<dyn DeltaObject> = match format {
             "blob" => Box::new(DeltaBlob { data }),
-            "commit" => Box::new(DeltaCommit { data }),
+            "commit" => Box::new(DeltaCommit {
+                data: kvlm_parse(&data)?,
+            }),
             "tag" => Box::new(DeltaTag { data }),
             "tree" => Box::new(DeltaTree { data }),
             _ => return Err("Invalid format".into()),

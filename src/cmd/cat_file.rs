@@ -1,4 +1,4 @@
-use std::{env, error::Error, io::Write};
+use std::{env, io::Write};
 
 use crate::repo::DeltaRepository;
 
