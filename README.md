@@ -14,6 +14,7 @@ It was originally written in [python](https://wyag.thb.lt/#orgf615a9c), but I de
 - [ ] commit
 - [x] hash-object
 - [x] init
+- [x] kill
 - [ ] log
 - [ ] ls-files
 - [ ] rev-parse
