@@ -3,15 +3,11 @@ use std::{env, io::Write};
 use crate::repo::DeltaRepository;
 
 pub fn cat_file(object: String, format: String) {
-    let cwd = env::current_dir().expect("Errored when getting cwd");
-    let repo = match DeltaRepository::repo_find(cwd, true) {
-        Ok(Some(repo)) => repo,
-        Ok(None) => {
-            eprintln!("Not a delta repo");
-            return;
-        }
+    let cwd = env::current_dir().expect("Error getting cwd");
+    let repo = match DeltaRepository::repo_find(cwd) {
+        Ok(repo) => repo,
         Err(e) => {
-            eprintln!("Error finding repo {}", e);
+            eprintln!("Error finding repo: {}", e);
             return;
         }
     };
@@ -24,7 +20,7 @@ pub fn cat_file(object: String, format: String) {
             return;
         }
         Err(e) => {
-            eprintln!("Error reading object {}", e);
+            eprintln!("Error reading object: {}", e);
             return;
         }
     };
@@ -32,12 +28,12 @@ pub fn cat_file(object: String, format: String) {
     let data = match serialised {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Error serialising object {}", e);
+            eprintln!("Error serialising object: {}", e);
             return;
         }
     };
 
     if let Err(e) = std::io::stdout().write_all(&data) {
-        eprintln!("Error writing to stdout {}", e)
+        eprintln!("Error writing to stdout: {}", e)
     }
 }

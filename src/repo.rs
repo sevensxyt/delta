@@ -1,5 +1,5 @@
 use crate::kvlm::kvlm_parse;
-use crate::object::{DeltaBlob, DeltaCommit, DeltaObject, DeltaTag, DeltaTree};
+use crate::object::{self, DeltaBlob, DeltaCommit, DeltaObject, DeltaTag, DeltaTree};
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
@@ -17,6 +17,11 @@ pub struct DeltaRepository {
     pub worktree: PathBuf,
     pub deltadir: PathBuf,
     pub config: Option<Ini>,
+}
+
+struct ObjectHash {
+    sha: String,
+    payload: Vec<u8>,
 }
 
 impl DeltaRepository {
@@ -46,9 +51,9 @@ impl DeltaRepository {
                 match config.get("core", "repositoryformatversion").as_deref() {
                     Some("0") => {}
                     Some(v) => {
-                        return Err(format!("Unsupported repositoryformatversion: {}", v).into())
+                        return Err(format!("Unsupported repository format version: {}", v).into())
                     }
-                    None => return Err("Missing repositoryformatversion".into()),
+                    None => return Err("Missing repository format version".into()),
                 }
             }
         }
@@ -93,7 +98,7 @@ impl DeltaRepository {
         }
     }
 
-    pub fn repo_create(&self, path: PathBuf) -> Result<DeltaRepository, Box<dyn Error>> {
+    pub fn repo_create(&self, path: &PathBuf) -> Result<DeltaRepository, Box<dyn Error>> {
         let repo = DeltaRepository::new(&path, true)?;
 
         if repo.worktree.exists() {
@@ -141,7 +146,7 @@ impl DeltaRepository {
         config
     }
 
-    pub fn repo_find(path: PathBuf, throw_error: bool) -> Result<Option<Self>, Box<dyn Error>> {
+    pub fn repo_find_optional(path: PathBuf) -> Result<Option<Self>, Box<dyn Error>> {
         if path.join(".delta").exists() {
             return Ok(Some(Self::new(&path, false)?));
         }
@@ -149,15 +154,15 @@ impl DeltaRepository {
         let parent = match path.parent() {
             Some(path) => path.to_path_buf(),
             None => {
-                if throw_error {
-                    return Err("No delta directory found".into());
-                } else {
-                    return Ok(None);
-                }
+                return Err("No delta directory found".into());
             }
         };
 
-        Self::repo_find(parent, throw_error)
+        Self::repo_find_optional(parent)
+    }
+
+    pub fn repo_find(path: PathBuf) -> Result<Self, Box<dyn Error>> {
+        Self::repo_find_optional(path)?.ok_or_else(|| "No delta repository found".into())
     }
 
     pub fn object_read(&self, sha: &str) -> Result<Option<Box<dyn DeltaObject>>, Box<dyn Error>> {
@@ -211,7 +216,7 @@ impl DeltaRepository {
     }
 
     fn object_write(&self, object: &dyn DeltaObject) -> Result<(), Box<dyn Error>> {
-        let (sha, payload) = Self::compute_object_hash(object)?;
+        let ObjectHash { sha, payload } = Self::compute_object_hash(object)?;
         let path = Self::repo_file(&self, &["objects", &sha[0..2], &sha[2..]], true)?;
         if !path.exists() {
             let mut buffer = Vec::new();
@@ -228,12 +233,7 @@ impl DeltaRepository {
         return name;
     }
 
-    pub fn object_hash(
-        data: Vec<u8>,
-        format: &str,
-        repo: Option<DeltaRepository>,
-        write: bool,
-    ) -> Result<String, Box<dyn Error>> {
+    pub fn object_hash(data: Vec<u8>, format: &str, write: bool) -> Result<String, Box<dyn Error>> {
         let object: Box<dyn DeltaObject> = match format {
             "blob" => Box::new(DeltaBlob { data }),
             "commit" => Box::new(DeltaCommit {
@@ -243,17 +243,20 @@ impl DeltaRepository {
             "tree" => Box::new(DeltaTree { data }),
             _ => return Err("Invalid format".into()),
         };
-        let (sha, _) = Self::compute_object_hash(&*object)?;
+        let object_hash = Self::compute_object_hash(&*object)?;
 
         if write {
-            let repo = repo.ok_or("Unable to write without repository")?;
-            let _ = repo.object_write(&*object);
+            let cwd = std::env::current_dir()?;
+            let repo = Self::repo_find(cwd)?;
+            repo.object_write(&*object)?;
         }
 
-        Ok(sha)
+        Ok(object_hash.sha)
     }
 
-    fn compute_object_hash(object: &dyn DeltaObject) -> Result<(String, Vec<u8>), Box<dyn Error>> {
+    // fn write_object_hash()
+
+    fn compute_object_hash(object: &dyn DeltaObject) -> Result<ObjectHash, Box<dyn Error>> {
         let data = object.serialise()?;
         let header = format!(
             "{} {}\x00",
@@ -262,7 +265,7 @@ impl DeltaRepository {
         );
         let payload = [header.as_bytes(), &data].concat();
         let sha = format!("{:x}", Sha1::digest(&payload));
-        Ok((sha, payload))
+        Ok(ObjectHash { sha, payload })
     }
 
     fn decompress(data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
