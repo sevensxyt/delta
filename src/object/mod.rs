@@ -60,11 +60,7 @@ impl ObjectFormat {
             b"commit" => Ok(Self::Commit),
             b"tag" => Ok(Self::Tag),
             b"tree" => Ok(Self::Tree),
-            _ => Err(format!(
-                "Error converting object format to bytes: Invalid format {:?}",
-                format
-            )
-            .into()),
+            _ => Err(format!("Unknown format {:?}", format).into()),
         }
     }
 }

@@ -1,6 +1,5 @@
-use std::{error::Error, path::PathBuf};
-
 use clap::{Parser, Subcommand};
+use std::{error::Error, path::PathBuf};
 pub mod cmd;
 pub mod kvlm;
 pub mod object;
