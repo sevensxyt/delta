@@ -1,13 +1,15 @@
 use crate::object::DeltaObject;
 use std::error::Error;
 
+use super::ObjectFormat;
+
 pub struct DeltaBlob {
     pub data: Vec<u8>,
 }
 
 impl DeltaObject for DeltaBlob {
-    fn format(&self) -> &'static [u8] {
-        return b"blob";
+    fn format(&self) -> ObjectFormat {
+        ObjectFormat::Blob
     }
 
     fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {

@@ -1,13 +1,10 @@
-use std::path::PathBuf;
-
 use crate::repo::DeltaRepository;
+use clap::error::Result;
+use std::{error::Error, path::PathBuf};
 
-pub fn init(path: PathBuf) {
-    match DeltaRepository::new(&path, true) {
-        Ok(repo) => match repo.repo_create(&path) {
-            Ok(_) => println!("Initialised empty delta repo at: {}", path.display()),
-            Err(e) => eprintln!("Failed to create repo: {}", e),
-        },
-        Err(e) => eprintln!("Failed to initialise repo: {}", e),
-    }
+pub fn init(path: PathBuf) -> Result<(), Box<dyn Error>> {
+    let repo = DeltaRepository::new(&path, true)?;
+    repo.repo_create(&path)?;
+    println!("Initialised empty delta repo at: {}", path.display());
+    Ok(())
 }

@@ -1,39 +1,15 @@
-use std::{env, io::Write};
-
+use crate::object::DeltaObject;
 use crate::repo::DeltaRepository;
+use std::{env, error::Error, io::Write};
 
-pub fn cat_file(object: String, format: String) {
+pub fn cat_file(object: String, format: String) -> Result<(), Box<dyn Error>> {
     let cwd = env::current_dir().expect("Error getting cwd");
-    let repo = match DeltaRepository::repo_find(cwd) {
-        Ok(repo) => repo,
-        Err(e) => {
-            eprintln!("Error finding repo: {}", e);
-            return;
-        }
-    };
+    let repo = DeltaRepository::repo_find(cwd)?;
 
     let sha = repo.object_find(object, format, true);
-    let obj = match repo.object_read(&sha) {
-        Ok(Some(object)) => object,
-        Ok(None) => {
-            eprintln!("Error finding object");
-            return;
-        }
-        Err(e) => {
-            eprintln!("Error reading object: {}", e);
-            return;
-        }
-    };
-    let serialised = obj.serialise();
-    let data = match serialised {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("Error serialising object: {}", e);
-            return;
-        }
-    };
+    let obj = repo.object_read(&sha)?.ok_or("Object not found")?;
+    let data = obj.serialise()?;
 
-    if let Err(e) = std::io::stdout().write_all(&data) {
-        eprintln!("Error writing to stdout: {}", e)
-    }
+    std::io::stdout().write_all(&data)?;
+    Ok(())
 }

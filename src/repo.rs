@@ -1,5 +1,7 @@
 use crate::kvlm::kvlm_parse;
-use crate::object::{self, DeltaBlob, DeltaCommit, DeltaObject, DeltaTag, DeltaTree};
+use crate::object::{
+    DeltaBlob, DeltaCommit, DeltaObject, DeltaObjectEnum, DeltaTag, DeltaTree, ObjectFormat,
+};
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
@@ -165,7 +167,7 @@ impl DeltaRepository {
         Self::repo_find_optional(path)?.ok_or_else(|| "No delta repository found".into())
     }
 
-    pub fn object_read(&self, sha: &str) -> Result<Option<Box<dyn DeltaObject>>, Box<dyn Error>> {
+    pub fn object_read(&self, sha: &str) -> Result<Option<DeltaObjectEnum>, Box<dyn Error>> {
         let path = self.repo_file(&["objects", &sha[0..2], &sha[2..]], false)?;
 
         if !path.is_file() {
@@ -193,26 +195,34 @@ impl DeltaRepository {
             return Err(format!("Malformed obejct {} bad length", sha).into());
         }
 
-        let mut constructor: Box<dyn DeltaObject> = match format {
-            b"commit" => Box::new(DeltaCommit {
-                data: IndexMap::new(),
-            }),
-            b"tree" => Box::new(DeltaTree { data: vec![] }),
-            b"tag" => Box::new(DeltaTag { data: vec![] }),
-            b"blob" => Box::new(DeltaBlob { data: vec![] }),
-            _ => {
-                return Err(format!(
-                    "Unknown type {} for object {}",
-                    std::str::from_utf8(format)?,
-                    sha
-                )
-                .into())
+        let content = &raw[null_byte_index + 1..];
+        let format = ObjectFormat::from_bytes(format)?;
+        let object = match format {
+            ObjectFormat::Commit => {
+                let mut obj = DeltaCommit {
+                    data: IndexMap::new(),
+                };
+                obj.deserialise(content)?;
+                DeltaObjectEnum::Commit(obj)
+            }
+            ObjectFormat::Tree => {
+                let mut obj = DeltaTree { data: vec![] };
+                obj.deserialise(content)?;
+                DeltaObjectEnum::Tree(obj)
+            }
+            ObjectFormat::Tag => {
+                let mut obj = DeltaTag { data: vec![] };
+                obj.deserialise(content)?;
+                DeltaObjectEnum::Tag(obj)
+            }
+            ObjectFormat::Blob => {
+                let mut obj = DeltaBlob { data: vec![] };
+                obj.deserialise(content)?;
+                DeltaObjectEnum::Blob(obj)
             }
         };
 
-        let content = &raw[null_byte_index + 1..];
-        constructor.deserialise(content)?;
-        Ok(Some(constructor))
+        Ok(Some(object))
     }
 
     fn object_write(&self, object: &dyn DeltaObject) -> Result<(), Box<dyn Error>> {
@@ -230,8 +240,10 @@ impl DeltaRepository {
     }
 
     pub fn object_find(&self, name: String, format: String, follow: bool) -> String {
-        return name;
+        name
     }
+
+    pub fn object_resolve(&self, name: String) {}
 
     pub fn object_hash(data: Vec<u8>, format: &str, write: bool) -> Result<String, Box<dyn Error>> {
         let object: Box<dyn DeltaObject> = match format {
@@ -243,24 +255,22 @@ impl DeltaRepository {
             "tree" => Box::new(DeltaTree { data }),
             _ => return Err("Invalid format".into()),
         };
-        let object_hash = Self::compute_object_hash(&*object)?;
+        let ObjectHash { sha, payload: _ } = Self::compute_object_hash(object.as_ref())?;
 
         if write {
             let cwd = std::env::current_dir()?;
             let repo = Self::repo_find(cwd)?;
-            repo.object_write(&*object)?;
+            repo.object_write(object.as_ref())?;
         }
 
-        Ok(object_hash.sha)
+        Ok(sha)
     }
-
-    // fn write_object_hash()
 
     fn compute_object_hash(object: &dyn DeltaObject) -> Result<ObjectHash, Box<dyn Error>> {
         let data = object.serialise()?;
         let header = format!(
             "{} {}\x00",
-            std::str::from_utf8(object.format())?,
+            std::str::from_utf8(object.format().as_bytes())?,
             data.len()
         );
         let payload = [header.as_bytes(), &data].concat();

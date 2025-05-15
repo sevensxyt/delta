@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{error::Error, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 pub mod cmd;
@@ -56,12 +56,12 @@ pub enum Command {
     Tag,
 }
 
-pub fn main() {
+pub fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     match args.command {
         Command::Add => cmd::add(),
-        Command::CatFile { object, format } => cmd::cat_file(object, format),
+        Command::CatFile { object, format } => cmd::cat_file(object, format)?,
         Command::CheckIgnore => cmd::check_ignore(),
         Command::Checkout => cmd::checkout(),
         Command::Commit => cmd::commit(),
@@ -69,16 +69,18 @@ pub fn main() {
             path,
             format,
             write,
-        } => cmd::hash_object(path, format, write),
-        Command::Init { path } => cmd::init(path),
-        Command::Log { commit } => cmd::log(commit),
+        } => cmd::hash_object(path, format, write)?,
+        Command::Init { path } => cmd::init(path)?,
+        Command::Log { commit } => cmd::log(commit)?,
         Command::LsFiles => cmd::ls_files(),
         Command::LsTree => cmd::ls_tree(),
         Command::RevParse => cmd::rev_parse(),
         Command::Rm => cmd::rm(),
-        Command::Kill { path } => cmd::kill(path),
+        Command::Kill { path } => cmd::kill(path)?,
         Command::ShowRef => cmd::show_ref(),
         Command::Status => cmd::status(),
         Command::Tag => cmd::tag(),
     }
+
+    Ok(())
 }

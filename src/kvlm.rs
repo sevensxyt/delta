@@ -1,6 +1,8 @@
 use indexmap::IndexMap;
 use std::error::Error;
 
+pub const MESSAGE_KEY: &str = "";
+
 pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn Error>> {
     fn parse(
         raw: &[u8],

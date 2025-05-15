@@ -1,13 +1,15 @@
 use crate::object::DeltaObject;
 use std::error::Error;
 
+use super::ObjectFormat;
+
 pub struct DeltaTree {
     pub data: Vec<u8>,
 }
 
 impl DeltaObject for DeltaTree {
-    fn format(&self) -> &'static [u8] {
-        return b"tree";
+    fn format(&self) -> ObjectFormat {
+        ObjectFormat::Tree
     }
 
     fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {
