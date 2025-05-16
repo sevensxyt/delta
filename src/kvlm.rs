@@ -14,13 +14,15 @@ pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn 
             return Ok(hashmap);
         }
 
-        let space = raw[start..]
+        let space = raw
             .iter()
+            .skip(start)
             .position(|&b| b == b' ')
             .map(|i| start + i);
 
-        let newline = raw[start..]
+        let newline = raw
             .iter()
+            .skip(start)
             .position(|&b| b == b'\n')
             .map(|i| start + i)
             .ok_or("Newline not found")?;

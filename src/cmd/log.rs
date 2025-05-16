@@ -25,18 +25,19 @@ fn log_graph(repo: &DeltaRepository, sha: String) {
         let message = commit
             .data
             .get(kvlm::MESSAGE_KEY)
-            .map_or(String::new(), |m| {
-                m.iter()
+            .map(|m| {
+                let raw = m
+                    .iter()
                     .map(|v| String::from_utf8_lossy(v))
-                    .collect::<Vec<_>>()
-                    .join("")
+                    .collect::<String>();
+
+                raw.strip_suffix('\n')
+                    .unwrap_or(&raw)
                     .trim()
                     .replace("\\", "\\\\")
                     .replace("\"", "\\\"")
-                    .strip_suffix("\n")
-                    .unwrap_or("")
-                    .into()
-            });
+            })
+            .unwrap_or_default();
 
         println!(" c_{} [label=\"{}: {}\"]", sha, &sha[0..7], message);
         match commit.data.get(kvlm::PARENT_KEY) {
