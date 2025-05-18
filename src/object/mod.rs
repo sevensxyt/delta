@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, fmt, fmt::Display};
 
 pub enum DeltaObjectEnum {
     Blob(DeltaBlob),
@@ -45,15 +45,6 @@ pub enum ObjectFormat {
 }
 
 impl ObjectFormat {
-    pub fn as_bytes(&self) -> &'static [u8] {
-        match self {
-            Self::Blob => b"blob",
-            Self::Commit => b"commit",
-            Self::Tag => b"tag",
-            Self::Tree => b"tree",
-        }
-    }
-
     pub fn from_bytes(format: &[u8]) -> Result<ObjectFormat, Box<dyn Error>> {
         match format {
             b"blob" => Ok(Self::Blob),
@@ -62,6 +53,19 @@ impl ObjectFormat {
             b"tree" => Ok(Self::Tree),
             _ => Err(format!("Unknown format {:?}", format).into()),
         }
+    }
+}
+
+impl Display for ObjectFormat {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = match self {
+            ObjectFormat::Blob => "blob",
+            ObjectFormat::Commit => "commit",
+            ObjectFormat::Tag => "tag",
+            ObjectFormat::Tree => "tree",
+        };
+
+        write!(f, "{}", s)
     }
 }
 

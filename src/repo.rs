@@ -239,8 +239,13 @@ impl DeltaRepository {
         Ok(())
     }
 
-    pub fn object_find(&self, name: String, format: String, follow: bool) -> String {
-        name
+    pub fn object_find(
+        &self,
+        name: &str,
+        format: ObjectFormat,
+        follow: bool,
+    ) -> Result<String, Box<dyn Error>> {
+        Ok(name.to_string())
     }
 
     pub fn object_resolve(&self, name: String) {}
@@ -268,11 +273,7 @@ impl DeltaRepository {
 
     fn compute_object_hash(object: &dyn DeltaObject) -> Result<ObjectHash, Box<dyn Error>> {
         let data = object.serialise()?;
-        let header = format!(
-            "{} {}\x00",
-            std::str::from_utf8(object.format().as_bytes())?,
-            data.len()
-        );
+        let header = format!("{} {}\x00", object.format(), data.len());
         let payload = [header.as_bytes(), &data].concat();
         let sha = format!("{:x}", Sha1::digest(&payload));
         Ok(ObjectHash { sha, payload })

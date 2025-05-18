@@ -1,11 +1,11 @@
-use crate::kvlm;
-use crate::object::DeltaCommit;
+use crate::kvlm::{self, KvlmKey};
+use crate::object::{DeltaCommit, ObjectFormat};
 use crate::repo::DeltaRepository;
 use std::{collections::HashSet, env, error::Error};
 
 pub fn log(commit: String) -> Result<(), Box<dyn Error>> {
     let repo = DeltaRepository::repo_find(env::current_dir()?)?;
-    let object = repo.object_find(commit, "dummy".into(), true);
+    let object = repo.object_find(&commit, ObjectFormat::Commit, true)?;
     log_graph(&repo, object);
     Ok(())
 }
@@ -24,7 +24,7 @@ fn log_graph(repo: &DeltaRepository, sha: String) {
         let commit: DeltaCommit = object.try_into()?;
         let message = commit
             .data
-            .get(kvlm::MESSAGE_KEY)
+            .get(KvlmKey::Message.as_str())
             .map(|m| {
                 let raw = m
                     .iter()
@@ -40,7 +40,7 @@ fn log_graph(repo: &DeltaRepository, sha: String) {
             .unwrap_or_default();
 
         println!(" c_{} [label=\"{}: {}\"]", sha, &sha[0..7], message);
-        match commit.data.get(kvlm::PARENT_KEY) {
+        match commit.data.get(KvlmKey::Parent.as_str()) {
             None => return Ok(()),
             Some(parents) => {
                 for p in parents {

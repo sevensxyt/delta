@@ -1,9 +1,9 @@
 use super::ObjectFormat;
 use crate::object::DeltaObject;
 use hex;
-use std::{error::Error, os::unix::ffi::OsStrExt, path::PathBuf};
+use std::{error::Error, path::PathBuf};
 
-struct DeltaTreeLeaf {
+pub struct DeltaTreeLeaf {
     pub mode: [u8; 6],
     pub path: PathBuf,
     pub sha: String,
@@ -94,6 +94,10 @@ impl DeltaTree {
         }
 
         Ok(res)
+    }
+
+    pub fn items(&self) -> Result<Vec<DeltaTreeLeaf>, Box<dyn Error>> {
+        Ok(DeltaTreeLeaf::parse_tree(&self.data)?)
     }
 }
 

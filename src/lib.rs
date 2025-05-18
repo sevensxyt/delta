@@ -23,7 +23,14 @@ pub enum Command {
         object: String,
     },
     CheckIgnore,
-    Checkout,
+    #[command(about = "Checkout a commit inside of a directoy")]
+    Checkout {
+        #[arg(help = "The commit or tree to checkout")]
+        commit: String,
+
+        #[arg(help = "The EMPTY directory to checkout on")]
+        path: PathBuf,
+    },
     Commit,
     HashObject {
         path: PathBuf,
@@ -43,7 +50,14 @@ pub enum Command {
         commit: String,
     },
     LsFiles,
-    LsTree,
+    #[command(about = "Pretty-print a tree object")]
+    LsTree {
+        #[arg(help = "A tree-ish object")]
+        tree: String,
+
+        #[arg(short = 'r', long = "recursive", help = "Recurse into sub-trees")]
+        recurse: bool,
+    },
     RevParse,
     Rm,
     Kill {
@@ -62,7 +76,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         Command::Add => cmd::add(),
         Command::CatFile { object, format } => cmd::cat_file(object, format)?,
         Command::CheckIgnore => cmd::check_ignore(),
-        Command::Checkout => cmd::checkout(),
+        Command::Checkout { commit, path } => cmd::checkout(commit, path)?,
         Command::Commit => cmd::commit(),
         Command::HashObject {
             path,
@@ -72,7 +86,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         Command::Init { path } => cmd::init(path)?,
         Command::Log { commit } => cmd::log(commit)?,
         Command::LsFiles => cmd::ls_files(),
-        Command::LsTree => cmd::ls_tree(),
+        Command::LsTree { tree, recurse } => cmd::ls_tree(tree, recurse)?,
         Command::RevParse => cmd::rev_parse(),
         Command::Rm => cmd::rm(),
         Command::Kill { path } => cmd::kill(path)?,

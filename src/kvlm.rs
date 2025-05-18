@@ -1,8 +1,21 @@
 use indexmap::IndexMap;
 use std::error::Error;
 
-pub const MESSAGE_KEY: &str = "";
-pub const PARENT_KEY: &str = "parent";
+pub enum KvlmKey {
+    Message,
+    Parent,
+    Tree,
+}
+
+impl KvlmKey {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Message => "",
+            Self::Parent => "parent",
+            Self::Tree => "tree",
+        }
+    }
+}
 
 pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn Error>> {
     fn parse(
@@ -93,7 +106,7 @@ pub fn kvlm_serialise(kvlm: &IndexMap<String, Vec<Vec<u8>>>) -> Result<String, B
         }
     }
 
-    if let Some(message) = kvlm.get("") {
+    if let Some(message) = kvlm.get(KvlmKey::Message.as_str()) {
         out.push('\n');
         for m in message {
             out.push_str(&String::from_utf8_lossy(m));
