@@ -192,7 +192,7 @@ impl DeltaRepository {
 
         let s = std::str::from_utf8(&raw[ascii_space_index + 1..null_byte_index])?;
         if s.parse::<usize>()? != raw.len() - null_byte_index - 1 {
-            return Err(format!("Malformed obejct {} bad length", sha).into());
+            return Err(format!("Malformed object {} bad length", sha).into());
         }
 
         let content = &raw[null_byte_index + 1..];

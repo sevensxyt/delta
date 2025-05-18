@@ -1,7 +1,7 @@
-use crate::object::DeltaObject;
-use std::{error::Error, path::PathBuf};
-
 use super::ObjectFormat;
+use crate::object::DeltaObject;
+use hex;
+use std::{error::Error, os::unix::ffi::OsStrExt, path::PathBuf};
 
 struct DeltaTreeLeaf {
     pub mode: [u8; 6],
@@ -57,10 +57,44 @@ impl DeltaTreeLeaf {
             },
         ))
     }
+
+    fn tree_leaf_sort_key(leaf: &DeltaTreeLeaf) -> String {
+        let mut key = leaf.path.to_str().unwrap_or("invalid utf8").to_owned();
+        if &leaf.mode[..2] != b"10" {
+            key.push('/');
+        }
+        key
+    }
 }
 
 pub struct DeltaTree {
     pub data: Vec<u8>,
+}
+
+impl DeltaTree {
+    fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut leaves = DeltaTreeLeaf::parse_tree(&self.data)?;
+        leaves.sort_by_key(DeltaTreeLeaf::tree_leaf_sort_key);
+        let mut res = vec![];
+
+        for leaf in leaves {
+            res.extend(&leaf.mode);
+
+            res.push(b' ');
+
+            let path = leaf.path.to_str().ok_or("Invalid UTF-8 path")?.as_bytes();
+            res.extend(path);
+
+            res.push(b'\x00');
+
+            let sha: [u8; 20] = hex::decode(leaf.sha)?
+                .try_into()
+                .map_err(|_| "SHA must be 20 bytes")?;
+            res.extend(&sha);
+        }
+
+        Ok(res)
+    }
 }
 
 impl DeltaObject for DeltaTree {
@@ -69,7 +103,7 @@ impl DeltaObject for DeltaTree {
     }
 
     fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {
-        Ok(self.data.clone())
+        Ok(self.serialise()?)
     }
 
     fn deserialise(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
