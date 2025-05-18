@@ -1,4 +1,4 @@
-use crate::kvlm::{self, KvlmKey};
+use crate::kvlm::KvlmKey;
 use crate::object::{DeltaCommit, ObjectFormat};
 use crate::repo::DeltaRepository;
 use std::{collections::HashSet, env, error::Error};

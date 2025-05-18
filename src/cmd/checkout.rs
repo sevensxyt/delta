@@ -2,18 +2,18 @@ use std::{error::Error, fs, path::PathBuf};
 
 use crate::{
     kvlm::KvlmKey,
-    object::{DeltaObjectEnum, DeltaTree},
+    object::{DeltaObject, DeltaObjectEnum, DeltaTree},
     repo::DeltaRepository,
 };
 
 pub fn checkout(commit: String, path: PathBuf) -> Result<(), Box<dyn Error>> {
     let cwd = std::env::current_dir()?;
     let repo = DeltaRepository::repo_find(cwd)?;
-    let Some(mut obj) = repo.object_read(&commit)? else {
+    let Some(obj) = repo.object_read(&commit)? else {
         return Err(format!("Object with commit '{}' not found", commit).into());
     };
 
-    if let DeltaObjectEnum::Commit(commit_obj) = obj {
+    let tree = if let DeltaObjectEnum::Commit(commit_obj) = obj {
         let tree_sha = commit_obj
             .data
             .get(KvlmKey::Tree.as_str())
@@ -21,8 +21,18 @@ pub fn checkout(commit: String, path: PathBuf) -> Result<(), Box<dyn Error>> {
             .ok_or(format!("Commit {} does not have a tree", commit))?;
 
         let tree_sha = String::from_utf8_lossy(tree_sha);
-        obj = repo.object_read(&tree_sha)?.ok_or("Tree not found")?;
-    }
+        let tree_obj = repo.object_read(&tree_sha)?.ok_or("Tree not found")?;
+
+        match tree_obj {
+            DeltaObjectEnum::Tree(tree) => tree,
+            other => return Err(format!("Expected tree, got {}", other.format()).into()),
+        }
+    } else {
+        match obj {
+            DeltaObjectEnum::Tree(tree) => tree,
+            other => return Err(format!("Expected commit or tree, got {}", other.format()).into()),
+        }
+    };
 
     if path.exists() {
         if !path.is_dir() {
@@ -36,7 +46,7 @@ pub fn checkout(commit: String, path: PathBuf) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(&path)?;
     }
 
-    // tree_checkout(&repo, obj, path);
+    tree_checkout(&repo, tree, path)?;
     Ok(())
 }
 
@@ -45,5 +55,23 @@ fn tree_checkout(
     tree: DeltaTree,
     path: PathBuf,
 ) -> Result<(), Box<dyn Error>> {
+    for item in tree.items()? {
+        let obj = repo
+            .object_read(&item.sha)?
+            .ok_or(format!("Cannot find item with sha {}", item.sha))?;
+
+        let dest = path.join(item.path);
+
+        match obj {
+            DeltaObjectEnum::Tree(tree) => {
+                fs::create_dir(&dest)?;
+                tree_checkout(repo, tree, dest)?
+            }
+            DeltaObjectEnum::Blob(blob) => fs::write(dest, blob.data)?,
+            other => {
+                return Err(format!("Unable to checkout object of type {}", other.format()).into())
+            }
+        }
+    }
     Ok(())
 }
