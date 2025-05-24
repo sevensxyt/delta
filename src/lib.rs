@@ -3,6 +3,7 @@ use std::{error::Error, path::PathBuf};
 pub mod cmd;
 pub mod kvlm;
 pub mod object;
+pub mod reference;
 pub mod repo;
 
 #[derive(Parser)]
@@ -64,6 +65,7 @@ pub enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
+    #[command(about = "List references")]
     ShowRef,
     Status,
     Tag,
@@ -90,7 +92,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         Command::RevParse => cmd::rev_parse(),
         Command::Rm => cmd::rm(),
         Command::Kill { path } => cmd::kill(path)?,
-        Command::ShowRef => cmd::show_ref(),
+        Command::ShowRef => cmd::show_ref()?,
         Command::Status => cmd::status(),
         Command::Tag => cmd::tag(),
     }

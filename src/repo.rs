@@ -2,6 +2,7 @@ use crate::kvlm::kvlm_parse;
 use crate::object::{
     DeltaBlob, DeltaCommit, DeltaObject, DeltaObjectEnum, DeltaTag, DeltaTree, ObjectFormat,
 };
+use anyhow::{anyhow, Context, Result};
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
@@ -27,12 +28,12 @@ struct ObjectHash {
 }
 
 impl DeltaRepository {
-    pub fn new(path: &Path, force: bool) -> Result<Self, Box<dyn Error>> {
+    pub fn new(path: &Path, force: bool) -> Result<Self> {
         let worktree = path.to_path_buf();
         let deltadir = worktree.join(".delta");
 
         if !force && !deltadir.is_dir() {
-            return Err(format!("Not a delta repository: {}", path.display()).into());
+            return Err(anyhow!("Not a delta repository: {}", path.display()));
         }
 
         let config = if force {
@@ -41,10 +42,20 @@ impl DeltaRepository {
             let config_path = deltadir.join("config");
             if config_path.exists() {
                 let mut ini = Ini::new();
-                ini.load(config_path.to_str().unwrap())?;
+                let config_path = config_path.to_str().ok_or_else(|| {
+                    anyhow!(
+                        "Error converting config path {} to string",
+                        config_path.display()
+                    )
+                })?;
+                ini.load(config_path)
+                    .map_err(|e| anyhow!(e))
+                    .with_context(|| {
+                        format!("Error loading ini config from path {}", config_path)
+                    })?;
                 Some(ini)
             } else {
-                return Err("Config is missing".into());
+                return Err(anyhow!("Config is missing"));
             }
         };
 
@@ -52,10 +63,8 @@ impl DeltaRepository {
             if let Some(ref config) = config {
                 match config.get("core", "repositoryformatversion").as_deref() {
                     Some("0") => {}
-                    Some(v) => {
-                        return Err(format!("Unsupported repository format version: {}", v).into())
-                    }
-                    None => return Err("Missing repository format version".into()),
+                    Some(v) => return Err(anyhow!("Unsupported repository format version: {}", v)),
+                    None => return Err(anyhow!("Missing repository format version")),
                 }
             }
         }
@@ -72,7 +81,7 @@ impl DeltaRepository {
             .fold(self.deltadir.clone(), |acc, p| acc.join(p))
     }
 
-    pub fn repo_file(&self, path: &[&str], mkdir: bool) -> Result<PathBuf, Box<dyn Error>> {
+    pub fn repo_file(&self, path: &[&str], mkdir: bool) -> Result<PathBuf> {
         if mkdir {
             let parent_path = &path[..path.len() - 1];
             self.repo_dir(parent_path, mkdir)?;
@@ -81,14 +90,17 @@ impl DeltaRepository {
         Ok(self.repo_path(path))
     }
 
-    pub fn repo_dir(&self, path: &[&str], mkdir: bool) -> Result<PathBuf, Box<dyn Error>> {
+    pub fn repo_dir(&self, path: &[&str], mkdir: bool) -> Result<PathBuf> {
         let path = self.repo_path(path);
 
         if path.exists() {
             if path.is_dir() {
                 return Ok(path);
             } else {
-                return Err("Path exists but is not a directory".into());
+                return Err(anyhow!(
+                    "Path {} exists but is not a directory",
+                    path.display()
+                ));
             }
         }
 
@@ -96,7 +108,8 @@ impl DeltaRepository {
             fs::create_dir_all(&path)?;
             Ok(path)
         } else {
-            Err("Directory does not exist".into())
+            // Err("Directory does not exist".into())
+            Err(anyhow!("Directory does not exist"))
         }
     }
 
@@ -148,23 +161,25 @@ impl DeltaRepository {
         config
     }
 
-    pub fn repo_find_optional(path: PathBuf) -> Result<Option<Self>, Box<dyn Error>> {
+    pub fn repo_find_optional(path: PathBuf) -> Result<Option<Self>> {
+        let path = path
+            .canonicalize()
+            .with_context(|| format!("No such file exists {}", path.display()))?;
+
         if path.join(".delta").exists() {
             return Ok(Some(Self::new(&path, false)?));
         }
 
-        let parent = match path.parent() {
-            Some(path) => path.to_path_buf(),
-            None => {
-                return Err("No delta directory found".into());
-            }
-        };
+        let parent = path
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| anyhow!("No delta directory found"))?;
 
         Self::repo_find_optional(parent)
     }
 
-    pub fn repo_find(path: PathBuf) -> Result<Self, Box<dyn Error>> {
-        Self::repo_find_optional(path)?.ok_or_else(|| "No delta repository found".into())
+    pub fn repo_find(path: PathBuf) -> Result<Self> {
+        Self::repo_find_optional(path)?.ok_or_else(|| anyhow!("No delta repository found"))
     }
 
     pub fn object_read(&self, sha: &str) -> Result<Option<DeltaObjectEnum>, Box<dyn Error>> {
