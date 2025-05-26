@@ -1,5 +1,5 @@
+use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
-use std::error::Error;
 
 pub enum KvlmKey {
     Message,
@@ -17,12 +17,12 @@ impl KvlmKey {
     }
 }
 
-pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn Error>> {
+pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>> {
     fn parse(
         raw: &[u8],
         start: usize,
         mut hashmap: IndexMap<String, Vec<Vec<u8>>>,
-    ) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn Error>> {
+    ) -> Result<IndexMap<String, Vec<Vec<u8>>>> {
         if start >= raw.len() {
             return Ok(hashmap);
         }
@@ -38,7 +38,7 @@ pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn 
             .skip(start)
             .position(|&b| b == b'\n')
             .map(|i| start + i)
-            .ok_or("Newline not found")?;
+            .ok_or(anyhow!("Newline not found"))?;
 
         let is_message = match space {
             Some(space) => space > newline,
@@ -47,7 +47,7 @@ pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn 
 
         if is_message {
             if newline != start {
-                return Err("Unexpected format: newline before key".into());
+                return Err(anyhow!("Unexpected format: newline before key"));
             }
 
             let message = std::str::from_utf8(&raw[start + 1..])?.to_string();
@@ -59,7 +59,7 @@ pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn 
             return Ok(hashmap);
         }
 
-        let space = space.ok_or("Space should be defined at this point")?;
+        let space = space.ok_or(anyhow!("Space should be defined at this point"))?;
         let key = std::str::from_utf8(&raw[start..space])?.to_string();
         let mut end = space;
 
@@ -68,7 +68,7 @@ pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn 
                 .iter()
                 .position(|&b| b == b'\n')
                 .map(|i| end + 1 + i)
-                .ok_or("Unexpected end of value")?;
+                .ok_or(anyhow!("Unexpected end of value"))?;
 
             if end + 1 >= raw.len() || raw[end + 1] != b' ' {
                 break;
@@ -89,7 +89,7 @@ pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>, Box<dyn 
     Ok(hashmap)
 }
 
-pub fn kvlm_serialise(kvlm: &IndexMap<String, Vec<Vec<u8>>>) -> Result<String, Box<dyn Error>> {
+pub fn kvlm_serialise(kvlm: &IndexMap<String, Vec<Vec<u8>>>) -> Result<String> {
     let mut out = String::new();
 
     for (key, values) in kvlm {

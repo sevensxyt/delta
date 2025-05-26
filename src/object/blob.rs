@@ -1,5 +1,5 @@
 use crate::object::DeltaObject;
-use std::error::Error;
+use anyhow::Result;
 
 use super::ObjectFormat;
 
@@ -12,11 +12,11 @@ impl DeltaObject for DeltaBlob {
         ObjectFormat::Blob
     }
 
-    fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+    fn serialise(&self) -> Result<Vec<u8>> {
         Ok(self.data.clone())
     }
 
-    fn deserialise(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+    fn deserialise(&mut self, data: &[u8]) -> Result<()> {
         self.data = data.to_vec();
         Ok(())
     }

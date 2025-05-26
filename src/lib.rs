@@ -68,7 +68,17 @@ pub enum Command {
     #[command(about = "List references")]
     ShowRef,
     Status,
-    Tag,
+    #[command(about = "List and create tags")]
+    Tag {
+        #[arg(help = "The new tag's name")]
+        name: Option<String>,
+
+        #[arg(default_value = "HEAD", help = "The object the tag will point to")]
+        object: String,
+
+        #[arg(short = 'a', help = "Whether to create the tag object")]
+        create_tag_object: bool,
+    },
 }
 
 pub fn main() -> Result<(), Box<dyn Error>> {
@@ -94,7 +104,11 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         Command::Kill { path } => cmd::kill(path)?,
         Command::ShowRef => cmd::show_ref()?,
         Command::Status => cmd::status(),
-        Command::Tag => cmd::tag(),
+        Command::Tag {
+            name,
+            object,
+            create_tag_object,
+        } => cmd::tag(name, object, create_tag_object)?,
     }
 
     Ok(())

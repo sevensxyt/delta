@@ -1,5 +1,6 @@
 use super::ObjectFormat;
 use crate::object::DeltaObject;
+use anyhow::{anyhow, Result};
 use hex;
 use std::{error::Error, path::PathBuf};
 
@@ -10,7 +11,7 @@ pub struct DeltaTreeLeaf {
 }
 
 impl DeltaTreeLeaf {
-    fn parse_tree(raw: &[u8]) -> Result<Vec<DeltaTreeLeaf>, Box<dyn Error>> {
+    fn parse_tree(raw: &[u8]) -> Result<Vec<DeltaTreeLeaf>> {
         let mut offset = 0;
         let mut leaves = vec![];
 
@@ -23,23 +24,23 @@ impl DeltaTreeLeaf {
         Ok(leaves)
     }
 
-    fn parse_leaf(raw: &[u8], start: usize) -> Result<(usize, DeltaTreeLeaf), Box<dyn Error>> {
+    fn parse_leaf(raw: &[u8], start: usize) -> Result<(usize, DeltaTreeLeaf)> {
         let space_index = raw
             .iter()
             .skip(start)
             .position(|b| *b == b' ')
             .map(|i| i + start)
-            .ok_or("Invalid format: Could not find mode")?;
+            .ok_or(anyhow!("Invalid format: Could not find mode"))?;
         let mode: [u8; 6] = raw[start..space_index]
             .try_into()
-            .map_err(|_| "Mode must be 6 bytes")?;
+            .map_err(|_| anyhow!("Mode must be 6 bytes"))?;
 
         let null_index = raw
             .iter()
             .skip(start)
             .position(|b| *b == b'\x00')
             .map(|i| i + start)
-            .ok_or("Invalid format: Could not find path")?;
+            .ok_or(anyhow!("Invalid format: Could not find path"))?;
         let path = std::str::from_utf8(&raw[space_index + 1..null_index])?;
 
         let end = null_index + 21;
@@ -72,7 +73,7 @@ pub struct DeltaTree {
 }
 
 impl DeltaTree {
-    fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+    fn serialise(&self) -> Result<Vec<u8>> {
         let mut leaves = DeltaTreeLeaf::parse_tree(&self.data)?;
         leaves.sort_by_key(DeltaTreeLeaf::tree_leaf_sort_key);
         let mut res = vec![];
@@ -82,14 +83,18 @@ impl DeltaTree {
 
             res.push(b' ');
 
-            let path = leaf.path.to_str().ok_or("Invalid UTF-8 path")?.as_bytes();
+            let path = leaf
+                .path
+                .to_str()
+                .ok_or(anyhow!("Invalid UTF-8 path"))?
+                .as_bytes();
             res.extend(path);
 
             res.push(b'\x00');
 
             let sha: [u8; 20] = hex::decode(leaf.sha)?
                 .try_into()
-                .map_err(|_| "SHA must be 20 bytes")?;
+                .map_err(|_| anyhow!("SHA must be 20 bytes"))?;
             res.extend(&sha);
         }
 
@@ -106,11 +111,11 @@ impl DeltaObject for DeltaTree {
         ObjectFormat::Tree
     }
 
-    fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+    fn serialise(&self) -> Result<Vec<u8>> {
         Ok(self.serialise()?)
     }
 
-    fn deserialise(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+    fn deserialise(&mut self, data: &[u8]) -> Result<()> {
         self.data = data.to_vec();
         Ok(())
     }

@@ -1,10 +1,12 @@
+use crate::kvlm::{kvlm_parse, kvlm_serialise};
 use crate::object::DeltaObject;
-use std::error::Error;
+use anyhow::Result;
+use indexmap::IndexMap;
 
 use super::ObjectFormat;
 
 pub struct DeltaTag {
-    pub data: Vec<u8>,
+    pub data: IndexMap<String, Vec<Vec<u8>>>,
 }
 
 impl DeltaObject for DeltaTag {
@@ -12,12 +14,12 @@ impl DeltaObject for DeltaTag {
         ObjectFormat::Tag
     }
 
-    fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {
-        Ok(self.data.clone())
+    fn serialise(&self) -> Result<Vec<u8>> {
+        Ok(kvlm_serialise(&self.data)?.into_bytes())
     }
 
-    fn deserialise(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
-        self.data = data.to_vec();
+    fn deserialise(&mut self, data: &[u8]) -> Result<()> {
+        self.data = kvlm_parse(data)?;
         Ok(())
     }
 }

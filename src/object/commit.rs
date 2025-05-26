@@ -1,5 +1,6 @@
 use crate::kvlm::{kvlm_parse, kvlm_serialise};
 use crate::object::{DeltaObject, DeltaObjectEnum};
+use anyhow::Result;
 use indexmap::IndexMap;
 use std::error::Error;
 
@@ -14,11 +15,11 @@ impl DeltaObject for DeltaCommit {
         ObjectFormat::Commit
     }
 
-    fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+    fn serialise(&self) -> Result<Vec<u8>> {
         Ok(kvlm_serialise(&self.data)?.into_bytes())
     }
 
-    fn deserialise(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+    fn deserialise(&mut self, data: &[u8]) -> Result<()> {
         self.data = kvlm_parse(data)?;
         Ok(())
     }

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::{error::Error, fmt, fmt::Display};
 
 pub enum DeltaObjectEnum {
@@ -8,7 +9,7 @@ pub enum DeltaObjectEnum {
 }
 
 impl DeltaObject for DeltaObjectEnum {
-    fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+    fn serialise(&self) -> Result<Vec<u8>> {
         match self {
             DeltaObjectEnum::Blob(obj) => obj.serialise(),
             DeltaObjectEnum::Commit(obj) => obj.serialise(),
@@ -17,7 +18,7 @@ impl DeltaObject for DeltaObjectEnum {
         }
     }
 
-    fn deserialise(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+    fn deserialise(&mut self, data: &[u8]) -> Result<()> {
         match self {
             DeltaObjectEnum::Blob(obj) => obj.deserialise(data),
             DeltaObjectEnum::Commit(obj) => obj.deserialise(data),
@@ -70,8 +71,8 @@ impl Display for ObjectFormat {
 }
 
 pub trait DeltaObject {
-    fn serialise(&self) -> Result<Vec<u8>, Box<dyn Error>>;
-    fn deserialise(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>>;
+    fn serialise(&self) -> Result<Vec<u8>>;
+    fn deserialise(&mut self, data: &[u8]) -> Result<()>;
     fn format(&self) -> ObjectFormat;
 }
 
