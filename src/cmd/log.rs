@@ -20,7 +20,7 @@ fn log_graph(repo: &DeltaRepository, sha: String) {
             return Ok(());
         }
 
-        let object = repo.object_read(&sha)?.ok_or("Object not found")?;
+        let object = repo.object_read(sha)?.ok_or("Object not found")?;
         let commit: DeltaCommit = object.try_into()?;
         let message = commit
             .data
@@ -54,7 +54,7 @@ fn log_graph(repo: &DeltaRepository, sha: String) {
         Ok(())
     }
 
-    if let Err(e) = recurse(&repo, &sha, &mut HashSet::new()) {
+    if let Err(e) = recurse(repo, &sha, &mut HashSet::new()) {
         eprintln!("Error printing logs: {}", e);
     }
 }

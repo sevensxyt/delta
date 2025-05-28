@@ -112,7 +112,7 @@ impl DeltaObject for DeltaTree {
     }
 
     fn serialise(&self) -> Result<Vec<u8>> {
-        Ok(self.serialise()?)
+        self.serialise()
     }
 
     fn deserialise(&mut self, data: &[u8]) -> Result<()> {

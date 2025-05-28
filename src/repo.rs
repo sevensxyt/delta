@@ -108,13 +108,12 @@ impl DeltaRepository {
             fs::create_dir_all(&path)?;
             Ok(path)
         } else {
-            // Err("Directory does not exist".into())
             Err(anyhow!("Directory does not exist"))
         }
     }
 
-    pub fn repo_create(&self, path: &PathBuf) -> Result<DeltaRepository, Box<dyn Error>> {
-        let repo = DeltaRepository::new(&path, true)?;
+    pub fn repo_create(&self, path: &Path) -> Result<DeltaRepository, Box<dyn Error>> {
+        let repo = DeltaRepository::new(path, true)?;
 
         if repo.worktree.exists() {
             if !repo.worktree.is_dir() {
@@ -244,7 +243,7 @@ impl DeltaRepository {
 
     pub fn object_write(&self, object: &dyn DeltaObject) -> Result<()> {
         let ObjectHash { sha, payload } = Self::compute_object_hash(object)?;
-        let path = Self::repo_file(&self, &["objects", &sha[0..2], &sha[2..]], true)?;
+        let path = Self::repo_file(self, &["objects", &sha[0..2], &sha[2..]], true)?;
         if !path.exists() {
             let mut buffer = Vec::new();
             let mut z = ZlibEncoder::new(&mut buffer, Compression::default());

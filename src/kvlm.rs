@@ -53,7 +53,7 @@ pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>> {
             let message = std::str::from_utf8(&raw[start + 1..])?.to_string();
             hashmap
                 .entry(String::new())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(message.into_bytes());
 
             return Ok(hashmap);
@@ -77,10 +77,7 @@ pub fn kvlm_parse(raw: &[u8]) -> Result<IndexMap<String, Vec<Vec<u8>>>> {
 
         let value = std::str::from_utf8(&raw[space + 1..end])?.replace("\n ", "\n");
 
-        hashmap
-            .entry(key)
-            .or_insert_with(Vec::new)
-            .push(value.into_bytes());
+        hashmap.entry(key).or_default().push(value.into_bytes());
 
         parse(raw, end + 1, hashmap)
     }

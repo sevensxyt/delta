@@ -11,7 +11,7 @@ pub enum RefEntry {
 
 pub fn ref_resolve(repo: &DeltaRepository, reference: &str) -> Result<Option<String>> {
     let path = repo
-        .repo_file(&[&reference], false)
+        .repo_file(&[reference], false)
         .with_context(|| format!("Failed to locate ref '{}'", reference))?;
 
     if !path.is_file() {
@@ -21,8 +21,8 @@ pub fn ref_resolve(repo: &DeltaRepository, reference: &str) -> Result<Option<Str
     let raw = fs::read_to_string(&path)?;
     let data = raw.trim_end();
 
-    if data.starts_with("ref: ") {
-        ref_resolve(repo, &data[5..])
+    if let Some(stripped) = data.strip_prefix("ref: ") {
+        ref_resolve(repo, stripped)
     } else {
         Ok(Some(data.to_string()))
     }
@@ -33,7 +33,7 @@ pub fn ref_list(repo: &DeltaRepository, path: Option<&Path>) -> Result<HashMap<S
     let path = path.unwrap_or(&dir);
     let mut res = HashMap::new();
 
-    for entry in fs::read_dir(&path)? {
+    for entry in fs::read_dir(path)? {
         let entry = entry?;
         let path = entry.path();
 
@@ -43,13 +43,13 @@ pub fn ref_list(repo: &DeltaRepository, path: Option<&Path>) -> Result<HashMap<S
             .ok_or(anyhow!("Error converting filename to str"))?;
 
         if path.is_dir() {
-            let children = ref_list(&repo, Some(&path))?;
+            let children = ref_list(repo, Some(&path))?;
             res.insert(filename.to_string(), RefEntry::Indirect(children));
         } else {
             let s = path
                 .to_str()
                 .ok_or(anyhow!("Error converting path to str"))?;
-            if let Some(data) = ref_resolve(&repo, s)? {
+            if let Some(data) = ref_resolve(repo, s)? {
                 res.insert(filename.to_string(), RefEntry::Direct(data));
             }
         }
