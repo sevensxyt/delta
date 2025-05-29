@@ -1,5 +1,4 @@
 use super::ObjectFormat;
-use crate::object::DeltaObject;
 use anyhow::{anyhow, Result};
 use hex;
 use std::{error::Error, path::PathBuf};
@@ -73,7 +72,15 @@ pub struct DeltaTree {
 }
 
 impl DeltaTree {
-    fn serialise(&self) -> Result<Vec<u8>> {
+    pub fn format(&self) -> ObjectFormat {
+        ObjectFormat::Tree
+    }
+
+    pub fn deserialise(&mut self, data: &[u8]) -> Result<()> {
+        self.data = data.to_vec();
+        Ok(())
+    }
+    pub fn serialise(&self) -> Result<Vec<u8>> {
         let mut leaves = DeltaTreeLeaf::parse_tree(&self.data)?;
         leaves.sort_by_key(DeltaTreeLeaf::tree_leaf_sort_key);
         let mut res = vec![];
@@ -103,20 +110,5 @@ impl DeltaTree {
 
     pub fn items(&self) -> Result<Vec<DeltaTreeLeaf>, Box<dyn Error>> {
         Ok(DeltaTreeLeaf::parse_tree(&self.data)?)
-    }
-}
-
-impl DeltaObject for DeltaTree {
-    fn format(&self) -> ObjectFormat {
-        ObjectFormat::Tree
-    }
-
-    fn serialise(&self) -> Result<Vec<u8>> {
-        self.serialise()
-    }
-
-    fn deserialise(&mut self, data: &[u8]) -> Result<()> {
-        self.data = data.to_vec();
-        Ok(())
     }
 }

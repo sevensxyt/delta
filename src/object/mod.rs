@@ -1,38 +1,38 @@
 use anyhow::Result;
 use std::{error::Error, fmt, fmt::Display};
 
-pub enum DeltaObjectEnum {
+pub enum DeltaObject {
     Blob(DeltaBlob),
     Commit(DeltaCommit),
     Tag(DeltaTag),
     Tree(DeltaTree),
 }
 
-impl DeltaObject for DeltaObjectEnum {
-    fn serialise(&self) -> Result<Vec<u8>> {
+impl DeltaObject {
+    pub fn serialise(&self) -> Result<Vec<u8>> {
         match self {
-            DeltaObjectEnum::Blob(obj) => obj.serialise(),
-            DeltaObjectEnum::Commit(obj) => obj.serialise(),
-            DeltaObjectEnum::Tag(obj) => obj.serialise(),
-            DeltaObjectEnum::Tree(obj) => obj.serialise(),
+            Self::Blob(obj) => obj.serialise(),
+            Self::Commit(obj) => obj.serialise(),
+            Self::Tag(obj) => obj.serialise(),
+            Self::Tree(obj) => obj.serialise(),
         }
     }
 
-    fn deserialise(&mut self, data: &[u8]) -> Result<()> {
+    pub fn deserialise(&mut self, data: &[u8]) -> Result<()> {
         match self {
-            DeltaObjectEnum::Blob(obj) => obj.deserialise(data),
-            DeltaObjectEnum::Commit(obj) => obj.deserialise(data),
-            DeltaObjectEnum::Tag(obj) => obj.deserialise(data),
-            DeltaObjectEnum::Tree(obj) => obj.deserialise(data),
+            Self::Blob(obj) => obj.deserialise(data),
+            Self::Commit(obj) => obj.deserialise(data),
+            Self::Tag(obj) => obj.deserialise(data),
+            Self::Tree(obj) => obj.deserialise(data),
         }
     }
 
-    fn format(&self) -> ObjectFormat {
+    pub fn format(&self) -> ObjectFormat {
         match self {
-            DeltaObjectEnum::Blob(obj) => obj.format(),
-            DeltaObjectEnum::Commit(obj) => obj.format(),
-            DeltaObjectEnum::Tag(obj) => obj.format(),
-            DeltaObjectEnum::Tree(obj) => obj.format(),
+            Self::Blob(obj) => obj.format(),
+            Self::Commit(obj) => obj.format(),
+            Self::Tag(obj) => obj.format(),
+            Self::Tree(obj) => obj.format(),
         }
     }
 }
@@ -68,12 +68,6 @@ impl Display for ObjectFormat {
 
         write!(f, "{}", s)
     }
-}
-
-pub trait DeltaObject {
-    fn serialise(&self) -> Result<Vec<u8>>;
-    fn deserialise(&mut self, data: &[u8]) -> Result<()>;
-    fn format(&self) -> ObjectFormat;
 }
 
 pub mod blob;

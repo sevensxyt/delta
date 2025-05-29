@@ -1,4 +1,4 @@
-use crate::object::{DeltaObject, ObjectFormat};
+use crate::object::ObjectFormat;
 use crate::repo::DeltaRepository;
 use std::{env, error::Error, io::Write};
 

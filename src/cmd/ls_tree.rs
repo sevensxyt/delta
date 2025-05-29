@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-use crate::object::{DeltaObjectEnum, ObjectFormat};
+use crate::object::{DeltaObject, ObjectFormat};
 use crate::repo::DeltaRepository;
 
 pub fn ls_tree(tree: String, recursive: bool) -> Result<(), Box<dyn Error>> {
@@ -18,8 +18,7 @@ fn recurse(
     prefix: PathBuf,
 ) -> Result<(), Box<dyn Error>> {
     let sha = repo.object_find(tree, ObjectFormat::Tree, true)?;
-    let DeltaObjectEnum::Tree(obj) = repo.object_read(&sha)?.ok_or("Error: Object not found")?
-    else {
+    let DeltaObject::Tree(obj) = repo.object_read(&sha)?.ok_or("Error: Object not found")? else {
         return Err("Object is not a tree".into());
     };
 

@@ -1,7 +1,5 @@
 use crate::kvlm::kvlm_parse;
-use crate::object::{
-    DeltaBlob, DeltaCommit, DeltaObject, DeltaObjectEnum, DeltaTag, DeltaTree, ObjectFormat,
-};
+use crate::object::{DeltaBlob, DeltaCommit, DeltaObject, DeltaTag, DeltaTree, ObjectFormat};
 use anyhow::{anyhow, Context, Result};
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
@@ -181,7 +179,7 @@ impl DeltaRepository {
         Self::repo_find_optional(path)?.ok_or_else(|| anyhow!("No delta repository found"))
     }
 
-    pub fn object_read(&self, sha: &str) -> Result<Option<DeltaObjectEnum>, Box<dyn Error>> {
+    pub fn object_read(&self, sha: &str) -> Result<Option<DeltaObject>, Box<dyn Error>> {
         let path = self.repo_file(&["objects", &sha[0..2], &sha[2..]], false)?;
 
         if !path.is_file() {
@@ -211,37 +209,22 @@ impl DeltaRepository {
 
         let content = &raw[null_byte_index + 1..];
         let format = ObjectFormat::from_bytes(format)?;
-        let object = match format {
-            ObjectFormat::Commit => {
-                let mut obj = DeltaCommit {
-                    data: IndexMap::new(),
-                };
-                obj.deserialise(content)?;
-                DeltaObjectEnum::Commit(obj)
-            }
-            ObjectFormat::Tree => {
-                let mut obj = DeltaTree { data: vec![] };
-                obj.deserialise(content)?;
-                DeltaObjectEnum::Tree(obj)
-            }
-            ObjectFormat::Tag => {
-                let mut obj = DeltaTag {
-                    data: IndexMap::new(),
-                };
-                obj.deserialise(content)?;
-                DeltaObjectEnum::Tag(obj)
-            }
-            ObjectFormat::Blob => {
-                let mut obj = DeltaBlob { data: vec![] };
-                obj.deserialise(content)?;
-                DeltaObjectEnum::Blob(obj)
-            }
+        let mut object = match format {
+            ObjectFormat::Commit => DeltaObject::Commit(DeltaCommit {
+                data: IndexMap::new(),
+            }),
+            ObjectFormat::Tree => DeltaObject::Tree(DeltaTree { data: vec![] }),
+            ObjectFormat::Tag => DeltaObject::Tag(DeltaTag {
+                data: IndexMap::new(),
+            }),
+            ObjectFormat::Blob => DeltaObject::Blob(DeltaBlob { data: vec![] }),
         };
+        object.deserialise(content)?;
 
         Ok(Some(object))
     }
 
-    pub fn object_write(&self, object: &dyn DeltaObject) -> Result<()> {
+    pub fn object_write(&self, object: &DeltaObject) -> Result<()> {
         let ObjectHash { sha, payload } = Self::compute_object_hash(object)?;
         let path = Self::repo_file(self, &["objects", &sha[0..2], &sha[2..]], true)?;
         if !path.exists() {
@@ -262,29 +245,29 @@ impl DeltaRepository {
     pub fn object_resolve(&self, name: String) {}
 
     pub fn object_hash(data: Vec<u8>, format: &str, write: bool) -> Result<String, Box<dyn Error>> {
-        let object: Box<dyn DeltaObject> = match format {
-            "blob" => Box::new(DeltaBlob { data }),
-            "commit" => Box::new(DeltaCommit {
+        let object = match format {
+            "blob" => DeltaObject::Blob(DeltaBlob { data }),
+            "commit" => DeltaObject::Commit(DeltaCommit {
                 data: kvlm_parse(&data)?,
             }),
-            "tag" => Box::new(DeltaTag {
+            "tag" => DeltaObject::Tag(DeltaTag {
                 data: kvlm_parse(&data)?,
             }),
-            "tree" => Box::new(DeltaTree { data }),
+            "tree" => DeltaObject::Tree(DeltaTree { data }),
             _ => return Err("Invalid format".into()),
         };
-        let ObjectHash { sha, payload: _ } = Self::compute_object_hash(object.as_ref())?;
+        let ObjectHash { sha, payload: _ } = Self::compute_object_hash(&object)?;
 
         if write {
             let cwd = std::env::current_dir()?;
             let repo = Self::repo_find(cwd)?;
-            repo.object_write(object.as_ref())?;
+            repo.object_write(&object)?;
         }
 
         Ok(sha)
     }
 
-    pub fn compute_object_hash(object: &dyn DeltaObject) -> Result<ObjectHash> {
+    pub fn compute_object_hash(object: &DeltaObject) -> Result<ObjectHash> {
         let data = object.serialise()?;
         let header = format!("{} {}\x00", object.format(), data.len());
         let payload = [header.as_bytes(), &data].concat();
