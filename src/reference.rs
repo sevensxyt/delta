@@ -12,7 +12,7 @@ pub enum RefEntry {
 pub fn ref_resolve(repo: &DeltaRepository, reference: &str) -> Result<Option<String>> {
     let path = repo
         .repo_file(&[reference], false)
-        .with_context(|| format!("Failed to locate ref '{}'", reference))?;
+        .context(format!("Failed to locate ref '{}'", reference))?;
 
     if !path.is_file() {
         return Ok(None);

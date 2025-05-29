@@ -1,8 +1,7 @@
 use crate::kvlm::{kvlm_parse, kvlm_serialise};
 use crate::object::DeltaObject;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
-use std::error::Error;
 
 use super::ObjectFormat;
 
@@ -26,12 +25,12 @@ impl DeltaCommit {
 }
 
 impl TryFrom<DeltaObject> for DeltaCommit {
-    type Error = Box<dyn Error>;
+    type Error = anyhow::Error;
 
     fn try_from(value: DeltaObject) -> Result<Self, Self::Error> {
         match value {
             DeltaObject::Commit(c) => Ok(c),
-            other => Err(format!("Expected commit, got {:?}", other.format()).into()),
+            other => Err(anyhow!("Expected commit, got {:?}", other.format())),
         }
     }
 }

@@ -1,7 +1,7 @@
 use super::ObjectFormat;
 use anyhow::{anyhow, Result};
 use hex;
-use std::{error::Error, path::PathBuf};
+use std::path::PathBuf;
 
 pub struct DeltaTreeLeaf {
     pub mode: [u8; 6],
@@ -108,7 +108,7 @@ impl DeltaTree {
         Ok(res)
     }
 
-    pub fn items(&self) -> Result<Vec<DeltaTreeLeaf>, Box<dyn Error>> {
+    pub fn items(&self) -> Result<Vec<DeltaTreeLeaf>> {
         Ok(DeltaTreeLeaf::parse_tree(&self.data)?)
     }
 }

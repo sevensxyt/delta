@@ -1,9 +1,11 @@
+use anyhow::{anyhow, Result};
+
 use crate::kvlm::KvlmKey;
 use crate::object::{DeltaCommit, ObjectFormat};
 use crate::repo::DeltaRepository;
-use std::{collections::HashSet, env, error::Error};
+use std::{collections::HashSet, env};
 
-pub fn log(commit: String) -> Result<(), Box<dyn Error>> {
+pub fn log(commit: String) -> Result<()> {
     let repo = DeltaRepository::repo_find(env::current_dir()?)?;
     let object = repo.object_find(&commit, ObjectFormat::Commit, true)?;
     log_graph(&repo, object);
@@ -11,16 +13,12 @@ pub fn log(commit: String) -> Result<(), Box<dyn Error>> {
 }
 
 fn log_graph(repo: &DeltaRepository, sha: String) {
-    fn recurse(
-        repo: &DeltaRepository,
-        sha: &str,
-        seen: &mut HashSet<String>,
-    ) -> Result<(), Box<dyn Error>> {
+    fn recurse(repo: &DeltaRepository, sha: &str, seen: &mut HashSet<String>) -> Result<()> {
         if !seen.insert(sha.to_string()) {
             return Ok(());
         }
 
-        let object = repo.object_read(sha)?.ok_or("Object not found")?;
+        let object = repo.object_read(sha)?.ok_or(anyhow!("Object not found"))?;
         let commit: DeltaCommit = object.try_into()?;
         let message = commit
             .data

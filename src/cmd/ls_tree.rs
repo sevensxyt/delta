@@ -1,25 +1,23 @@
-use std::error::Error;
 use std::path::PathBuf;
+
+use anyhow::{anyhow, Context, Result};
 
 use crate::object::{DeltaObject, ObjectFormat};
 use crate::repo::DeltaRepository;
 
-pub fn ls_tree(tree: String, recursive: bool) -> Result<(), Box<dyn Error>> {
+pub fn ls_tree(tree: String, recursive: bool) -> Result<()> {
     let repo = DeltaRepository::repo_find(std::env::current_dir()?)?;
     recurse(&repo, &tree, recursive, PathBuf::from(String::new()))?;
 
     Ok(())
 }
 
-fn recurse(
-    repo: &DeltaRepository,
-    tree: &str,
-    recursive: bool,
-    prefix: PathBuf,
-) -> Result<(), Box<dyn Error>> {
+fn recurse(repo: &DeltaRepository, tree: &str, recursive: bool, prefix: PathBuf) -> Result<()> {
     let sha = repo.object_find(tree, ObjectFormat::Tree, true)?;
-    let DeltaObject::Tree(obj) = repo.object_read(&sha)?.ok_or("Error: Object not found")? else {
-        return Err("Object is not a tree".into());
+    let obj = repo.object_read(&sha)?.context("Error: Object not found")?;
+
+    let DeltaObject::Tree(obj) = obj else {
+        return Err(anyhow!("Object is not a tree"));
     };
 
     for item in obj.items()? {
@@ -28,7 +26,7 @@ fn recurse(
             b"04" => ObjectFormat::Tree,
             b"10" | b"12" => ObjectFormat::Blob,
             b"16" => ObjectFormat::Commit,
-            _ => return Err(format!("Invalid type: {:?}", mode_type).into()),
+            _ => return Err(anyhow!("Invalid type: {:?}", mode_type)),
         };
 
         if recursive && obj_format == ObjectFormat::Tree {

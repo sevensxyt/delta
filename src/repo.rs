@@ -8,7 +8,6 @@ use indexmap::IndexMap;
 use ini::configparser::ini::Ini;
 use sha1::{Digest, Sha1};
 use std::{
-    error::Error,
     fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -48,9 +47,10 @@ impl DeltaRepository {
                 })?;
                 ini.load(config_path)
                     .map_err(|e| anyhow!(e))
-                    .with_context(|| {
-                        format!("Error loading ini config from path {}", config_path)
-                    })?;
+                    .context(format!(
+                        "Error loading ini config from path {}",
+                        config_path
+                    ))?;
                 Some(ini)
             } else {
                 return Err(anyhow!("Config is missing"));
@@ -110,14 +110,14 @@ impl DeltaRepository {
         }
     }
 
-    pub fn repo_create(&self, path: &Path) -> Result<DeltaRepository, Box<dyn Error>> {
+    pub fn repo_create(&self, path: &Path) -> Result<DeltaRepository> {
         let repo = DeltaRepository::new(path, true)?;
 
         if repo.worktree.exists() {
             if !repo.worktree.is_dir() {
-                return Err(format!("{} is not a directory", repo.worktree.display()).into());
+                return Err(anyhow!("{} is not a directory", repo.worktree.display()));
             } else if repo.deltadir.exists() && fs::read_dir(&repo.deltadir)?.next().is_some() {
-                return Err(format!("{} is not empty", repo.worktree.display()).into());
+                return Err(anyhow!("{} is not empty", repo.worktree.display()));
             }
         } else {
             fs::create_dir_all(&repo.worktree)?;
@@ -142,7 +142,7 @@ impl DeltaRepository {
         config.write(
             config_path
                 .to_str()
-                .expect("Failed converting config path to string"),
+                .ok_or(anyhow!("Failed converting config path to string"))?,
         )?;
 
         Ok(repo)
@@ -161,7 +161,7 @@ impl DeltaRepository {
     pub fn repo_find_optional(path: PathBuf) -> Result<Option<Self>> {
         let path = path
             .canonicalize()
-            .with_context(|| format!("No such file exists {}", path.display()))?;
+            .context(format!("No such file exists {}", path.display()))?;
 
         if path.join(".delta").exists() {
             return Ok(Some(Self::new(&path, false)?));
@@ -179,7 +179,7 @@ impl DeltaRepository {
         Self::repo_find_optional(path)?.ok_or_else(|| anyhow!("No delta repository found"))
     }
 
-    pub fn object_read(&self, sha: &str) -> Result<Option<DeltaObject>, Box<dyn Error>> {
+    pub fn object_read(&self, sha: &str) -> Result<Option<DeltaObject>> {
         let path = self.repo_file(&["objects", &sha[0..2], &sha[2..]], false)?;
 
         if !path.is_file() {
@@ -193,18 +193,18 @@ impl DeltaRepository {
         let raw = Self::decompress(&compressed)?;
         let ascii_space_index = match raw.iter().position(|&b| b == b' ') {
             Some(i) => i,
-            None => return Err("Invalid header: Missing ASCII space".into()),
+            None => return Err(anyhow!("Invalid header: Missing ASCII space")),
         };
         let format = &raw[0..ascii_space_index];
 
         let null_byte_index = match raw.iter().position(|&b| b == 0) {
             Some(i) => i,
-            None => return Err("Invalid header: Missing null byte".into()),
+            None => return Err(anyhow!("Invalid header: Missing null byte")),
         };
 
         let s = std::str::from_utf8(&raw[ascii_space_index + 1..null_byte_index])?;
         if s.parse::<usize>()? != raw.len() - null_byte_index - 1 {
-            return Err(format!("Malformed object {} bad length", sha).into());
+            return Err(anyhow!("Malformed object {} bad length", sha));
         }
 
         let content = &raw[null_byte_index + 1..];
@@ -244,7 +244,7 @@ impl DeltaRepository {
 
     pub fn object_resolve(&self, name: String) {}
 
-    pub fn object_hash(data: Vec<u8>, format: &str, write: bool) -> Result<String, Box<dyn Error>> {
+    pub fn object_hash(data: Vec<u8>, format: &str, write: bool) -> Result<String> {
         let object = match format {
             "blob" => DeltaObject::Blob(DeltaBlob { data }),
             "commit" => DeltaObject::Commit(DeltaCommit {
@@ -254,7 +254,7 @@ impl DeltaRepository {
                 data: kvlm_parse(&data)?,
             }),
             "tree" => DeltaObject::Tree(DeltaTree { data }),
-            _ => return Err("Invalid format".into()),
+            _ => return Err(anyhow!("Invalid format")),
         };
         let ObjectHash { sha, payload: _ } = Self::compute_object_hash(&object)?;
 
@@ -275,7 +275,7 @@ impl DeltaRepository {
         Ok(ObjectHash { sha, payload })
     }
 
-    fn decompress(data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    fn decompress(data: &[u8]) -> Result<Vec<u8>> {
         let mut decoder = ZlibDecoder::new(data);
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;

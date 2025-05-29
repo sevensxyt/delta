@@ -1,4 +1,6 @@
-use std::{error::Error, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
+
+use anyhow::{anyhow, Context, Result};
 
 use crate::{
     kvlm::KvlmKey,
@@ -6,11 +8,11 @@ use crate::{
     repo::DeltaRepository,
 };
 
-pub fn checkout(commit: String, path: PathBuf) -> Result<(), Box<dyn Error>> {
+pub fn checkout(commit: String, path: PathBuf) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let repo = DeltaRepository::repo_find(cwd)?;
     let Some(obj) = repo.object_read(&commit)? else {
-        return Err(format!("Object with commit '{}' not found", commit).into());
+        return Err(anyhow!("Object with commit '{}' not found", commit));
     };
 
     let tree = if let DeltaObject::Commit(commit_obj) = obj {
@@ -18,29 +20,29 @@ pub fn checkout(commit: String, path: PathBuf) -> Result<(), Box<dyn Error>> {
             .data
             .get(KvlmKey::Tree.as_str())
             .and_then(|v| v.first())
-            .ok_or(format!("Commit {} does not have a tree", commit))?;
+            .ok_or(anyhow!("Commit {} does not have a tree", commit))?;
 
         let tree_sha = String::from_utf8_lossy(tree_sha);
-        let tree_obj = repo.object_read(&tree_sha)?.ok_or("Tree not found")?;
+        let tree_obj = repo.object_read(&tree_sha)?.context("Tree not found")?;
 
         match tree_obj {
             DeltaObject::Tree(tree) => tree,
-            other => return Err(format!("Expected tree, got {}", other.format()).into()),
+            other => return Err(anyhow!("Expected tree, got {}", other.format())),
         }
     } else {
         match obj {
             DeltaObject::Tree(tree) => tree,
-            other => return Err(format!("Expected commit or tree, got {}", other.format()).into()),
+            other => return Err(anyhow!("Expected commit or tree, got {}", other.format())),
         }
     };
 
     if path.exists() {
         if !path.is_dir() {
-            return Err(format!("Not a directory {}", path.display()).into());
+            return Err(anyhow!("Not a directory {}", path.display()));
         }
 
         if fs::read_dir(&path)?.next().is_some() {
-            return Err(format!("Not empty {}", path.display()).into());
+            return Err(anyhow!("Not empty {}", path.display()));
         }
     } else {
         fs::create_dir_all(&path)?;
@@ -50,15 +52,11 @@ pub fn checkout(commit: String, path: PathBuf) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn tree_checkout(
-    repo: &DeltaRepository,
-    tree: DeltaTree,
-    path: PathBuf,
-) -> Result<(), Box<dyn Error>> {
+fn tree_checkout(repo: &DeltaRepository, tree: DeltaTree, path: PathBuf) -> Result<()> {
     for item in tree.items()? {
         let obj = repo
             .object_read(&item.sha)?
-            .ok_or(format!("Cannot find item with sha {}", item.sha))?;
+            .ok_or(anyhow!("Cannot find item with sha {}", item.sha))?;
 
         let dest = path.join(item.path);
 
@@ -69,7 +67,10 @@ fn tree_checkout(
             }
             DeltaObject::Blob(blob) => fs::write(dest, blob.data)?,
             other => {
-                return Err(format!("Unable to checkout object of type {}", other.format()).into())
+                return Err(anyhow!(
+                    "Unable to checkout object of type {}",
+                    other.format()
+                ))
             }
         }
     }

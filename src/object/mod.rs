@@ -1,5 +1,5 @@
-use anyhow::Result;
-use std::{error::Error, fmt, fmt::Display};
+use anyhow::{anyhow, Result};
+use std::{fmt, fmt::Display};
 
 pub enum DeltaObject {
     Blob(DeltaBlob),
@@ -46,13 +46,13 @@ pub enum ObjectFormat {
 }
 
 impl ObjectFormat {
-    pub fn from_bytes(format: &[u8]) -> Result<ObjectFormat, Box<dyn Error>> {
+    pub fn from_bytes(format: &[u8]) -> Result<ObjectFormat> {
         match format {
             b"blob" => Ok(Self::Blob),
             b"commit" => Ok(Self::Commit),
             b"tag" => Ok(Self::Tag),
             b"tree" => Ok(Self::Tree),
-            _ => Err(format!("Unknown format {:?}", format).into()),
+            _ => Err(anyhow!("Unknown format {:?}", format)),
         }
     }
 }

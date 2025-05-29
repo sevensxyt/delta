@@ -1,7 +1,9 @@
-use crate::repo::DeltaRepository;
-use std::{error::Error, io, path::PathBuf};
+use anyhow::Result;
 
-pub fn kill(path: PathBuf) -> Result<(), Box<dyn Error>> {
+use crate::repo::DeltaRepository;
+use std::{io, path::PathBuf};
+
+pub fn kill(path: PathBuf) -> Result<()> {
     let repo = DeltaRepository::repo_find(path)?;
     let deltadir = repo.deltadir.canonicalize().unwrap_or(repo.deltadir);
     let display_path = deltadir

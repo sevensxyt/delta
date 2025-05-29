@@ -1,5 +1,6 @@
+use anyhow::Result;
 use clap::{Parser, Subcommand};
-use std::{error::Error, path::PathBuf};
+use std::path::PathBuf;
 pub mod cmd;
 pub mod kvlm;
 pub mod object;
@@ -81,7 +82,7 @@ pub enum Command {
     },
 }
 
-pub fn main() -> Result<(), Box<dyn Error>> {
+pub fn main() -> Result<()> {
     let args = Args::parse();
 
     match args.command {
