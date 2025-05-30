@@ -320,17 +320,27 @@ impl DeltaRepository {
         let mut candidates: Vec<String> = vec![];
         let hash_re = Regex::new(r"^[0-9A-Fa-f]{4,40}$")?;
 
+        if name.len() < 4 {
+            return Err(anyhow!("Hash must have length of atleast 4"));
+        }
+
         if hash_re.is_match(name) {
+            if name.len() == 40 {
+                candidates.push(name.to_string());
+                return Ok(Some(candidates));
+            }
+
             let name = name.to_lowercase();
             let (prefix, rest) = &name.split_at(2);
             let path = self.repo_dir(&["objects", prefix], false)?;
 
             for entry in fs::read_dir(path)? {
                 let entry = entry?;
-                let path = entry.path();
+                let file_name = entry.file_name();
+                let path = file_name.to_string_lossy();
 
                 if path.starts_with(rest) {
-                    candidates.push(format!("{}{}", prefix, path.display()))
+                    candidates.push(format!("{}{}", prefix, path))
                 }
             }
         }
