@@ -13,7 +13,9 @@ pub fn ls_tree(tree: String, recursive: bool) -> Result<()> {
 }
 
 fn recurse(repo: &DeltaRepository, tree: &str, recursive: bool, prefix: PathBuf) -> Result<()> {
-    let sha = repo.object_find(tree, ObjectFormat::Tree, true)?;
+    let sha = repo
+        .object_find(tree, Some(ObjectFormat::Tree), true)?
+        .ok_or(anyhow!("Object not found"))?;
     let obj = repo.object_read(&sha)?.context("Error: Object not found")?;
 
     let DeltaObject::Tree(obj) = obj else {

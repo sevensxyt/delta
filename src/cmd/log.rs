@@ -7,7 +7,9 @@ use std::{collections::HashSet, env};
 
 pub fn log(commit: String) -> Result<()> {
     let repo = DeltaRepository::repo_find(env::current_dir()?)?;
-    let object = repo.object_find(&commit, ObjectFormat::Commit, true)?;
+    let object = repo
+        .object_find(&commit, Some(ObjectFormat::Commit), true)?
+        .ok_or(anyhow!("Commit {} not found", commit))?;
     log_graph(&repo, object);
     Ok(())
 }

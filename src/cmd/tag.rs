@@ -3,8 +3,9 @@ use std::fs;
 use crate::{
     kvlm::KvlmKey,
     object::{DeltaObject, DeltaTag, ObjectFormat},
+    repo::ObjectHash,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
 
 use crate::repo::DeltaRepository;
@@ -24,12 +25,15 @@ fn tag_create(
     object: String,
     create_tag_object: bool,
 ) -> Result<()> {
-    let sha = repo.object_find(&object, ObjectFormat::Commit, true)?;
+    let sha = repo
+        .object_find(&object, Some(ObjectFormat::Commit), true)?
+        .ok_or(anyhow!("Object not found"))?;
 
     let sha = if create_tag_object {
         let mut tag = DeltaTag {
             data: IndexMap::new(),
         };
+
         let value = vec![sha.as_bytes().to_vec()];
         tag.data.insert("object".to_string(), value);
 
@@ -48,8 +52,8 @@ fn tag_create(
 
         let tag = DeltaObject::Tag(tag);
         repo.object_write(&tag)?;
-        let tag_sha = DeltaRepository::compute_object_hash(&tag)?;
-        tag_sha.sha
+        let ObjectHash { sha, payload: _ } = DeltaRepository::compute_object_hash(&tag)?;
+        sha
     } else {
         sha
     };

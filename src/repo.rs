@@ -1,11 +1,13 @@
 use crate::kvlm::kvlm_parse;
 use crate::object::{DeltaBlob, DeltaCommit, DeltaObject, DeltaTag, DeltaTree, ObjectFormat};
+use crate::reference::ref_resolve;
 use anyhow::{anyhow, Context, Result};
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use indexmap::IndexMap;
 use ini::configparser::ini::Ini;
+use regex::Regex;
 use sha1::{Digest, Sha1};
 use std::{
     fs::{self, File},
@@ -226,7 +228,7 @@ impl DeltaRepository {
 
     pub fn object_write(&self, object: &DeltaObject) -> Result<()> {
         let ObjectHash { sha, payload } = Self::compute_object_hash(object)?;
-        let path = Self::repo_file(self, &["objects", &sha[0..2], &sha[2..]], true)?;
+        let path = self.repo_file(&["objects", &sha[0..2], &sha[2..]], true)?;
         if !path.exists() {
             let mut buffer = Vec::new();
             let mut z = ZlibEncoder::new(&mut buffer, Compression::default());
@@ -238,11 +240,109 @@ impl DeltaRepository {
         Ok(())
     }
 
-    pub fn object_find(&self, name: &str, format: ObjectFormat, follow: bool) -> Result<String> {
-        Ok(name.to_string())
+    pub fn object_find(
+        &self,
+        name: &str,
+        format: Option<ObjectFormat>,
+        follow: bool,
+    ) -> Result<Option<String>> {
+        let sha = self
+            .object_resolve(name)?
+            .context(anyhow!("No such reference {}", name))?;
+
+        if sha.len() > 1 {
+            let candidates = sha.join("\n - ");
+            return Err(anyhow!(
+                "Ambiguous reference {}: Candidates are:\n - {}.",
+                name,
+                candidates
+            ));
+        }
+
+        let mut sha = sha
+            .first()
+            .context(anyhow!("No such reference {}", name))?
+            .to_string();
+
+        if let Some(format) = format {
+            loop {
+                let Some(obj) = self.object_read(&sha)? else {
+                    return Err(anyhow!("No object found with sha {}", sha));
+                };
+
+                if obj.format() == format {
+                    return Ok(Some(sha.to_string()));
+                }
+
+                if !follow {
+                    return Ok(None);
+                }
+
+                if let DeltaObject::Tag(obj) = obj {
+                    let raw = obj
+                        .data
+                        .get("object")
+                        .and_then(|v| v.first())
+                        .ok_or(anyhow!("Tag object missing 'object' key"))?;
+
+                    sha = String::from_utf8_lossy(raw).to_string();
+                } else if let DeltaObject::Commit(obj) = obj {
+                    if format == ObjectFormat::Tree {
+                        let raw = obj
+                            .data
+                            .get("tree")
+                            .and_then(|v| v.first())
+                            .ok_or(anyhow!("Commit object missing 'tree' key"))?;
+
+                        sha = String::from_utf8_lossy(raw).to_string()
+                    } else {
+                        return Ok(None);
+                    }
+                } else {
+                    return Ok(None);
+                }
+            }
+        } else {
+            Ok(Some(sha.to_string()))
+        }
     }
 
-    pub fn object_resolve(&self, name: String) {}
+    pub fn object_resolve(&self, name: &str) -> Result<Option<Vec<String>>> {
+        if name.is_empty() {
+            return Ok(None);
+        }
+
+        if name == "HEAD" {
+            let reference = ref_resolve(self, "HEAD")?.context("Error finding head")?;
+            return Ok(Some(vec![reference]));
+        }
+
+        let mut candidates: Vec<String> = vec![];
+        let hash_re = Regex::new(r"^[0-9A-Fa-f]{4,40}$")?;
+
+        if hash_re.is_match(name) {
+            let name = name.to_lowercase();
+            let (prefix, rest) = &name.split_at(2);
+            let path = self.repo_dir(&["objects", prefix], false)?;
+
+            for entry in fs::read_dir(path)? {
+                let entry = entry?;
+                let path = entry.path();
+
+                if path.starts_with(rest) {
+                    candidates.push(format!("{}{}", prefix, path.display()))
+                }
+            }
+        }
+
+        for namespace in ["tags", "heads", "remotes"] {
+            if let Some(s) = ref_resolve(self, &format!("refs/{}/{}", namespace, name))? {
+                candidates.push(s)
+            }
+        }
+
+        Ok(Some(candidates))
+    }
 
     pub fn object_hash(data: Vec<u8>, format: &str, write: bool) -> Result<String> {
         let object = match format {

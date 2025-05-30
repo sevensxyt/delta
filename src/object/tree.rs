@@ -109,6 +109,6 @@ impl DeltaTree {
     }
 
     pub fn items(&self) -> Result<Vec<DeltaTreeLeaf>> {
-        Ok(DeltaTreeLeaf::parse_tree(&self.data)?)
+        DeltaTreeLeaf::parse_tree(&self.data)
     }
 }
