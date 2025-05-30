@@ -60,7 +60,14 @@ pub enum Command {
         #[arg(short = 'r', long = "recursive", help = "Recurse into sub-trees")]
         recurse: bool,
     },
-    RevParse,
+    #[command(about = "Parse revision (or other objects) identifiers")]
+    RevParse {
+        #[arg(help = "Specify the expected format", long = "format", default_value = None,  value_parser = ["blob", "commit", "tag", "tree"])]
+        format: Option<String>,
+
+        #[arg(help = "The name to parse")]
+        name: String,
+    },
     Rm,
     Kill {
         #[arg(default_value = ".")]
@@ -100,7 +107,7 @@ pub fn main() -> Result<()> {
         Command::Log { commit } => cmd::log(commit)?,
         Command::LsFiles => cmd::ls_files(),
         Command::LsTree { tree, recurse } => cmd::ls_tree(tree, recurse)?,
-        Command::RevParse => cmd::rev_parse(),
+        Command::RevParse { format, name } => cmd::rev_parse(format, name)?,
         Command::Rm => cmd::rm(),
         Command::Kill { path } => cmd::kill(path)?,
         Command::ShowRef => cmd::show_ref()?,
