@@ -27,7 +27,7 @@ impl DeltaTreeLeaf {
         let space_index = raw
             .iter()
             .skip(start)
-            .position(|b| *b == b' ')
+            .position(|&b| b == b' ')
             .map(|i| i + start)
             .ok_or(anyhow!("Invalid format: Could not find mode"))?;
         let mode: [u8; 6] = raw[start..space_index]
@@ -37,7 +37,7 @@ impl DeltaTreeLeaf {
         let null_index = raw
             .iter()
             .skip(start)
-            .position(|b| *b == b'\x00')
+            .position(|&b| b == b'\x00')
             .map(|i| i + start)
             .ok_or(anyhow!("Invalid format: Could not find path"))?;
         let path = std::str::from_utf8(&raw[space_index + 1..null_index])?;

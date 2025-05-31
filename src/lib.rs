@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 pub mod cmd;
+pub mod index;
 pub mod kvlm;
 pub mod object;
 pub mod reference;
