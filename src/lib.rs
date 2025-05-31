@@ -52,7 +52,11 @@ pub enum Command {
         #[arg(default_value = "HEAD")]
         commit: String,
     },
-    LsFiles,
+    #[command(about = "List all staged files")]
+    LsFiles {
+        #[arg(help = "Show everything", short = 'v', long = "verbose")]
+        verbose: bool,
+    },
     #[command(about = "Pretty-print a tree object")]
     LsTree {
         #[arg(help = "A tree-ish object")]
@@ -106,7 +110,7 @@ pub fn main() -> Result<()> {
         } => cmd::hash_object(path, format, write)?,
         Command::Init { path } => cmd::init(path)?,
         Command::Log { commit } => cmd::log(commit)?,
-        Command::LsFiles => cmd::ls_files(),
+        Command::LsFiles { verbose } => cmd::ls_files(verbose)?,
         Command::LsTree { tree, recurse } => cmd::ls_tree(tree, recurse)?,
         Command::RevParse { format, name } => cmd::rev_parse(format, name)?,
         Command::Rm => cmd::rm(),
