@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 pub mod cmd;
+pub mod ignore;
 pub mod index;
 pub mod kvlm;
 pub mod object;
@@ -25,8 +26,12 @@ pub enum Command {
         #[arg(name = "object", help = "The object to display")]
         object: String,
     },
-    CheckIgnore,
-    #[command(about = "Checkout a commit inside of a directoy")]
+    #[command(about = "Check path(s) against ignore rules")]
+    CheckIgnore {
+        #[arg(help = "Path(s) to check")]
+        paths: Vec<PathBuf>,
+    },
+    #[command(about = "Checkout a commit inside of a directory")]
     Checkout {
         #[arg(help = "The commit or tree to checkout")]
         commit: String,
@@ -100,7 +105,7 @@ pub fn main() -> Result<()> {
     match args.command {
         Command::Add => cmd::add(),
         Command::CatFile { object, format } => cmd::cat_file(object, format)?,
-        Command::CheckIgnore => cmd::check_ignore(),
+        Command::CheckIgnore { paths } => cmd::check_ignore(paths)?,
         Command::Checkout { commit, path } => cmd::checkout(commit, path)?,
         Command::Commit => cmd::commit(),
         Command::HashObject {
