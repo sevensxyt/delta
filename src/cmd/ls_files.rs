@@ -46,7 +46,7 @@ pub fn ls_files(verbose: bool) -> Result<()> {
             );
             println!(
                 "\tflags: stage={}, assume_valid={}",
-                e.flag_stage, e.flag_assume_valid
+                e.stage_flag, e.assume_valid_flag
             );
         }
     }

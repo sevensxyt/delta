@@ -1,8 +1,18 @@
-use std::{fmt::Display, fs};
+use hex::FromHex;
+use std::{
+    fmt::Display,
+    fs::{self, File},
+    io::Write,
+    iter::repeat_n,
+};
 
 use anyhow::{anyhow, Context, Result};
 
 use crate::repo::DeltaRepository;
+
+const ASSUME_VALID_FLAG: u16 = 0x8000;
+const STAGE_FLAG_MASK: u16 = 0x3000;
+const NAME_LENGTH_MASK: u16 = 0x0FFF;
 
 pub struct DeltaIndexEntry {
     pub ctime: (u32, u32),
@@ -22,8 +32,8 @@ pub struct DeltaIndexEntry {
     pub fsize: u32,
 
     pub sha: String,
-    pub flag_assume_valid: bool,
-    pub flag_stage: bool,
+    pub assume_valid_flag: bool,
+    pub stage_flag: u8,
 
     pub name: String,
 }
@@ -49,7 +59,7 @@ pub enum ModeType {
 }
 
 impl ModeType {
-    fn from_byte(byte: u8) -> Result<Self> {
+    fn from_bytes(byte: u8) -> Result<Self> {
         let mode_type = match byte {
             0b1000 => Self::Regular,
             0b1010 => Self::Symlink,
@@ -58,6 +68,14 @@ impl ModeType {
         };
 
         Ok(mode_type)
+    }
+
+    fn to_bytes(&self) -> u8 {
+        match self {
+            Self::Regular => 0b1000,
+            Self::Symlink => 0b1010,
+            Self::Deltalink => 0b1110,
+        }
     }
 }
 
@@ -96,7 +114,7 @@ impl DeltaIndex {
 
         let (version, count) = rest.split_at(4);
         let version = u32::from_be_bytes(version.try_into()?);
-        let count = usize::from_be_bytes(count.try_into()?);
+        let count = u32::from_be_bytes(count.try_into()?) as usize;
 
         if version != 2 {
             return Err(anyhow!(
@@ -108,10 +126,10 @@ impl DeltaIndex {
         let mut entries = vec![];
         let content = &raw[12..];
 
-        let mut i = 0;
-        while i < count {
+        let mut index = 0;
+        while index < count {
             let parse = |x, y| -> Result<u128> {
-                let data = &content[i + x..y + y];
+                let data = &content[index + x..index + y];
                 let byte_count = y - x;
 
                 let res = match byte_count {
@@ -140,7 +158,7 @@ impl DeltaIndex {
             };
 
             let mode = parse(26, 28)? as u16;
-            let mode_type = ModeType::from_byte((mode >> 12) as u8)?;
+            let mode_type = ModeType::from_bytes((mode >> 12) as u8)?;
             let mode_perms = mode & 0b0000000111111111;
 
             let uid = parse(28, 32)? as u32;
@@ -150,35 +168,45 @@ impl DeltaIndex {
             let sha = format!("{:040x}", parse(40, 60)?);
             let flags = parse(60, 62)? as u16;
 
-            let flag_assume_valid = flags & 0b1000000000000000 != 0;
-            let flag_extended = flags & 0b0100000000000000 != 0;
-            let flag_stage = flags & 0b0011000000000000 != 0;
-            let name_length = (flags & 0b0000111111111111) as usize;
+            let assume_valid_flag = flags & ASSUME_VALID_FLAG != 0;
+            let extended_flag = flags & 0b0100000000000000 != 0;
+            let stage_flag = ((flags & STAGE_FLAG_MASK) >> 12) as u8;
+            let name_length = (flags & NAME_LENGTH_MASK) as usize;
 
-            if flag_extended {
+            if extended_flag {
                 return Err(anyhow!("Flag should not be extended"));
             }
 
-            i += 62;
+            index += 62;
 
             let raw_name = if name_length < 0xFFF {
-                if content[i + name_length] != 0x00 {
-                    return Err(anyhow!("Name should end at this point"));
+                let pos = index + name_length;
+                if let Some(&b) = content.get(pos) {
+                    if b != 0x00 {
+                        return Err(anyhow!("Name should end at this point"));
+                    }
+                } else {
+                    return Err(anyhow!(
+                        "Position {} exceeds content length of {}",
+                        pos,
+                        content.len()
+                    ));
                 }
 
-                i += 1;
-                &content[i..i + name_length]
+                index += 1;
+                &content[index..index + name_length]
             } else {
                 let null_index = content
                     .iter()
+                    .skip(index)
                     .position(|&b| b == 0x00)
                     .ok_or(anyhow!("Name is not terminated"))?;
-                i += null_index;
-                &content[i..null_index]
+                index += null_index;
+                &content[index..null_index]
             };
 
             let name = String::from_utf8_lossy(raw_name).to_string();
-            i += 8 - (i % 8);
+            index += (8 - (index % 8)) % 8;
 
             let entry = DeltaIndexEntry {
                 ctime,
@@ -191,8 +219,8 @@ impl DeltaIndex {
                 gid,
                 fsize,
                 sha,
-                flag_assume_valid,
-                flag_stage,
+                assume_valid_flag,
+                stage_flag,
                 name,
             };
 
@@ -200,5 +228,59 @@ impl DeltaIndex {
         }
 
         Ok(DeltaIndex { version, entries })
+    }
+
+    pub fn write_index(&self, repo: &DeltaRepository) -> Result<()> {
+        let path = repo.repo_file(&["index"], true)?;
+        let mut file = File::create(path)?;
+        let mut content = Vec::<u8>::new();
+
+        content.extend_from_slice(b"DIRC");
+        content.extend_from_slice(&self.version.to_be_bytes());
+        content.extend_from_slice(&self.entries.len().to_be_bytes());
+
+        let mut index = 0;
+        for e in &self.entries {
+            content.extend_from_slice(&e.ctime.0.to_be_bytes());
+            content.extend_from_slice(&e.ctime.1.to_be_bytes());
+
+            content.extend_from_slice(&e.mtime.0.to_be_bytes());
+            content.extend_from_slice(&e.mtime.1.to_be_bytes());
+
+            content.extend_from_slice(&e.device_id.to_be_bytes());
+            content.extend_from_slice(&e.inode.to_be_bytes());
+
+            let mode = ((e.mode_type.to_bytes() as u16) << 12) | e.mode_perms;
+            content.extend_from_slice(&mode.to_be_bytes());
+
+            content.extend_from_slice(&e.uid.to_be_bytes());
+            content.extend_from_slice(&e.gid.to_be_bytes());
+
+            content.extend_from_slice(&e.fsize.to_be_bytes());
+
+            let sha = <[u8; 20]>::from_hex(&e.sha)?;
+            content.extend_from_slice(&sha);
+
+            let assume_valid_flag = if e.assume_valid_flag { 0x1 << 15 } else { 0 };
+            let stage_flag = (e.stage_flag as u16) << 12;
+
+            let name_bytes = &e.name.as_bytes();
+            let name_len = name_bytes.len().min(0xFFF);
+
+            let data = assume_valid_flag | stage_flag | name_len as u16;
+            content.extend_from_slice(&data.to_be_bytes());
+
+            content.extend_from_slice(name_bytes);
+            content.push(0);
+
+            index += 62 + name_bytes.len() + 1;
+            let padding = (8 - (index % 8)) % 8;
+            content.extend(repeat_n(0, padding));
+            index += padding;
+        }
+
+        file.write_all(&content)?;
+
+        Ok(())
     }
 }

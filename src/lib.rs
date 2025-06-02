@@ -85,6 +85,7 @@ pub enum Command {
     },
     #[command(about = "List references")]
     ShowRef,
+    #[command(about = "Show the working tree status")]
     Status,
     #[command(about = "List and create tags")]
     Tag {
@@ -121,7 +122,7 @@ pub fn main() -> Result<()> {
         Command::Rm => cmd::rm(),
         Command::Kill { path } => cmd::kill(path)?,
         Command::ShowRef => cmd::show_ref()?,
-        Command::Status => cmd::status(),
+        Command::Status => cmd::status()?,
         Command::Tag {
             name,
             object,
