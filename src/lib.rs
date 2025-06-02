@@ -78,7 +78,11 @@ pub enum Command {
         #[arg(help = "The name to parse")]
         name: String,
     },
-    Rm,
+    #[command(about = "Remove files from working tree and the index")]
+    Rm {
+        #[arg(help = "Files to remove")]
+        path: Vec<PathBuf>,
+    },
     Kill {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -119,7 +123,7 @@ pub fn main() -> Result<()> {
         Command::LsFiles { verbose } => cmd::ls_files(verbose)?,
         Command::LsTree { tree, recurse } => cmd::ls_tree(tree, recurse)?,
         Command::RevParse { format, name } => cmd::rev_parse(format, name)?,
-        Command::Rm => cmd::rm(),
+        Command::Rm { path } => cmd::rm(path)?,
         Command::Kill { path } => cmd::kill(path)?,
         Command::ShowRef => cmd::show_ref()?,
         Command::Status => cmd::status()?,
