@@ -1,8 +1,8 @@
-use hex::FromHex;
+use hex::{encode, FromHex};
 use std::{
     fmt::Display,
     fs::{self, File},
-    io::Write,
+    io::{Cursor, Read, Write},
     iter::repeat_n,
 };
 
@@ -10,9 +10,11 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::repo::DeltaRepository;
 
-const ASSUME_VALID_FLAG: u16 = 0x8000;
 const STAGE_FLAG_MASK: u16 = 0x3000;
 const NAME_LENGTH_MASK: u16 = 0x0FFF;
+const ASSUME_VALID_FLAG: u16 = 0x8000;
+const EXTENDED_FLAG_MASK: u16 = 0b0000000111111111;
+const MODE_PERMS_MASK: u16 = 0b0000000111111111;
 
 pub struct DeltaIndexEntry {
     pub ctime: (u32, u32),
@@ -102,20 +104,19 @@ impl DeltaIndex {
         let raw = fs::read(&index_file)
             .context(anyhow!("Error reading index file {}", index_file.display()))?;
 
-        let header = &raw[..12];
-        let (signature, rest) = header.split_at(4);
+        let mut cursor = Cursor::new(&raw);
+        let mut buf4 = [0u8; 4];
 
-        if signature != "DIRC".as_bytes() {
+        cursor.read_exact(&mut buf4)?;
+        if &buf4 != b"DIRC" {
             return Err(anyhow!(
                 "Signature should be 'DIRC', found {}",
-                std::str::from_utf8(signature)?
+                std::str::from_utf8(&buf4)?
             ));
         }
 
-        let (version, count) = rest.split_at(4);
-        let version = u32::from_be_bytes(version.try_into()?);
-        let count = u32::from_be_bytes(count.try_into()?) as usize;
-
+        cursor.read_exact(&mut buf4)?;
+        let version = u32::from_be_bytes(buf4);
         if version != 2 {
             return Err(anyhow!(
                 "Only version 2 is supported, version {} found instead",
@@ -123,92 +124,87 @@ impl DeltaIndex {
             ));
         }
 
+        cursor.read_exact(&mut buf4)?;
+        let count = u32::from_be_bytes(buf4) as usize;
+
         let mut entries = vec![];
-        let content = &raw[12..];
 
-        let mut index = 0;
-        while index < count {
-            let parse = |x, y| -> Result<u128> {
-                let data = &content[index + x..index + y];
-                let byte_count = y - x;
+        for _ in 0..count {
+            cursor.read_exact(&mut buf4)?;
+            let ctime_s = u32::from_be_bytes(buf4);
 
-                let res = match byte_count {
-                    20 => u128::from_be_bytes(data.try_into()?),
-                    4 => u32::from_be_bytes(data.try_into()?) as u128,
-                    2 => u32::from_be_bytes(data.try_into()?) as u128,
-                    c => return Err(anyhow!("Invalid byte count of {}", c)),
-                };
+            cursor.read_exact(&mut buf4)?;
+            let ctime_ns = u32::from_be_bytes(buf4);
 
-                Ok(res)
-            };
-
-            let ctime_s = parse(0, 4)? as u32;
-            let ctime_ns = parse(4, 8)? as u32;
             let ctime = (ctime_s, ctime_ns);
 
-            let mtime_s = parse(8, 12)? as u32;
-            let mtime_ns = parse(12, 16)? as u32;
+            cursor.read_exact(&mut buf4)?;
+            let mtime_s = u32::from_be_bytes(buf4);
+
+            cursor.read_exact(&mut buf4)?;
+            let mtime_ns = u32::from_be_bytes(buf4);
+
             let mtime = (mtime_s, mtime_ns);
 
-            let device_id = parse(16, 20)? as u32;
-            let inode_number = parse(20, 24)? as u32;
+            cursor.read_exact(&mut buf4)?;
+            let device_id = u32::from_be_bytes(buf4);
 
-            if parse(24, 26)? != 0 {
-                return Err(anyhow!("Bytes 24 to 27 should be unused"));
-            };
+            cursor.read_exact(&mut buf4)?;
+            let inode_number = u32::from_be_bytes(buf4);
 
-            let mode = parse(26, 28)? as u16;
+            let mut buf2 = [0u8; 2];
+            cursor.read_exact(&mut buf2)?;
+            let unused = u16::from_be_bytes(buf2);
+            if unused != 0 {
+                return Err(anyhow!("Field should be unused, found {}", unused));
+            }
+
+            cursor.read_exact(&mut buf2)?;
+            let mode = u16::from_be_bytes(buf2);
             let mode_type = ModeType::from_bytes((mode >> 12) as u8)?;
-            let mode_perms = mode & 0b0000000111111111;
+            let mode_perms = mode & MODE_PERMS_MASK;
 
-            let uid = parse(28, 32)? as u32;
-            let gid = parse(32, 36)? as u32;
-            let fsize = parse(36, 40)? as u32;
+            cursor.read_exact(&mut buf4)?;
+            let uid = u32::from_be_bytes(buf4);
 
-            let sha = format!("{:040x}", parse(40, 60)?);
-            let flags = parse(60, 62)? as u16;
+            cursor.read_exact(&mut buf4)?;
+            let gid = u32::from_be_bytes(buf4);
+
+            cursor.read_exact(&mut buf4)?;
+            let fsize = u32::from_be_bytes(buf4);
+
+            let mut sha = [0u8; 20];
+            cursor.read_exact(&mut sha)?;
+            let sha = encode(sha);
+
+            cursor.read_exact(&mut buf2)?;
+            let flags = u16::from_be_bytes(buf2);
 
             let assume_valid_flag = flags & ASSUME_VALID_FLAG != 0;
-            let extended_flag = flags & 0b0100000000000000 != 0;
+            let extended_flag = (flags & EXTENDED_FLAG_MASK) != 0;
             let stage_flag = ((flags & STAGE_FLAG_MASK) >> 12) as u8;
             let name_length = (flags & NAME_LENGTH_MASK) as usize;
 
             if extended_flag {
-                return Err(anyhow!("Flag should not be extended"));
+                return Err(anyhow!("Extended flag should be disabled"));
             }
 
-            index += 62;
+            let mut name_bytes = vec![0u8; name_length];
+            cursor.read_exact(&mut name_bytes)?;
 
-            let raw_name = if name_length < 0xFFF {
-                let pos = index + name_length;
-                if let Some(&b) = content.get(pos) {
-                    if b != 0x00 {
-                        return Err(anyhow!("Name should end at this point"));
-                    }
-                } else {
-                    return Err(anyhow!(
-                        "Position {} exceeds content length of {}",
-                        pos,
-                        content.len()
-                    ));
-                }
+            let mut null_byte = [0u8; 1];
+            cursor.read_exact(&mut null_byte)?;
+            if null_byte[0] != 0x00 {
+                return Err(anyhow!("Name is not terminated properly"));
+            }
 
-                index += 1;
-                &content[index..index + name_length]
-            } else {
-                let null_index = content
-                    .iter()
-                    .skip(index)
-                    .position(|&b| b == 0x00)
-                    .ok_or(anyhow!("Name is not terminated"))?;
-                index += null_index;
-                &content[index..null_index]
-            };
+            let name = String::from_utf8_lossy(&name_bytes).to_string();
 
-            let name = String::from_utf8_lossy(raw_name).to_string();
-            index += (8 - (index % 8)) % 8;
+            let pos = cursor.position();
+            let padding = (8 - (pos % 8)) % 8;
+            cursor.set_position(pos + padding);
 
-            let entry = DeltaIndexEntry {
+            entries.push(DeltaIndexEntry {
                 ctime,
                 mtime,
                 device_id,
@@ -222,9 +218,7 @@ impl DeltaIndex {
                 assume_valid_flag,
                 stage_flag,
                 name,
-            };
-
-            entries.push(entry);
+            });
         }
 
         Ok(DeltaIndex { version, entries })
