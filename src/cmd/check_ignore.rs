@@ -25,7 +25,7 @@ pub fn check_ignore(paths: Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn has_ignore(rules: &DeltaIgnore, path: &Path) -> Result<Option<bool>> {
+pub fn has_ignore(rules: &DeltaIgnore, path: &Path) -> Result<Option<bool>> {
     if path.is_absolute() {
         return Err(anyhow!(
             "Path needs to be relative to delta repository's root"

@@ -1,8 +1,4 @@
-use std::{
-    collections::HashSet,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, fs, path::PathBuf};
 
 use anyhow::{anyhow, Result};
 
@@ -11,15 +7,15 @@ use crate::{
     repo::DeltaRepository,
 };
 
-pub fn rm(path: Vec<PathBuf>) -> Result<()> {
+pub fn rm(path: &Vec<PathBuf>) -> Result<()> {
     let repo = DeltaRepository::repo_find(std::env::current_dir()?)?;
 
-    Ok(())
+    remove(&repo, path, true, false)
 }
 
 fn remove(
     repo: &DeltaRepository,
-    paths: Vec<&Path>,
+    paths: &Vec<PathBuf>,
     delete: bool,
     skip_missing: bool,
 ) -> Result<()> {

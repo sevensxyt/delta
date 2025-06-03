@@ -18,7 +18,11 @@ struct Args {
 
 #[derive(Subcommand)]
 pub enum Command {
-    Add,
+    #[command(about = "Add files contents to the index")]
+    Add {
+        #[arg(help = "Files to add")]
+        path: Vec<PathBuf>,
+    },
     CatFile {
         #[arg(name = "type", help = "Specify the type", value_parser = ["blob", "commit", "tag", "tree"])]
         format: String,
@@ -108,7 +112,7 @@ pub fn main() -> Result<()> {
     let args = Args::parse();
 
     match args.command {
-        Command::Add => cmd::add(),
+        Command::Add { path } => cmd::add(path)?,
         Command::CatFile { object, format } => cmd::cat_file(object, format)?,
         Command::CheckIgnore { paths } => cmd::check_ignore(paths)?,
         Command::Checkout { commit, path } => cmd::checkout(commit, path)?,
@@ -123,7 +127,7 @@ pub fn main() -> Result<()> {
         Command::LsFiles { verbose } => cmd::ls_files(verbose)?,
         Command::LsTree { tree, recurse } => cmd::ls_tree(tree, recurse)?,
         Command::RevParse { format, name } => cmd::rev_parse(format, name)?,
-        Command::Rm { path } => cmd::rm(path)?,
+        Command::Rm { path } => cmd::rm(&path)?,
         Command::Kill { path } => cmd::kill(path)?,
         Command::ShowRef => cmd::show_ref()?,
         Command::Status => cmd::status()?,

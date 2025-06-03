@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
+    os::macos::fs::MetadataExt,
     path::{Path, PathBuf},
 };
 
@@ -8,6 +9,7 @@ use anyhow::{anyhow, Result};
 use walkdir::WalkDir;
 
 use crate::{
+    cmd::check_ignore::has_ignore,
     ignore::DeltaIgnore,
     index::DeltaIndex,
     object::{DeltaObject, ObjectFormat},
@@ -21,7 +23,7 @@ pub fn status() -> Result<()> {
     branch_status(&repo)?;
     head_index_status(&repo, &index)?;
     println!();
-    // status_index_worktree(&repo, &index)?;
+    status_index_worktree(&repo, &index)?;
     Ok(())
 }
 
@@ -105,7 +107,8 @@ fn status_index_worktree(repo: &DeltaRepository, index: &DeltaIndex) -> Result<(
     println!("Changes not staged for commit:");
 
     let ignore = DeltaIgnore::deltaignore_read(repo)?;
-    let files = Vec::<PathBuf>::new();
+    let mut files = Vec::<PathBuf>::new();
+    let worktree = &repo.worktree;
 
     for entry in WalkDir::new(&repo.worktree) {
         let entry = entry?;
@@ -114,6 +117,55 @@ fn status_index_worktree(repo: &DeltaRepository, index: &DeltaIndex) -> Result<(
         if path.is_dir() && path.starts_with(&repo.deltadir) {
             continue;
         }
+
+        if path.is_file() {
+            let absolute_path = fs::canonicalize(path)?;
+            let relative_path = absolute_path.strip_prefix(worktree)?;
+
+            files.push(relative_path.to_path_buf());
+            files.push(absolute_path);
+        }
     }
+
+    for e in &index.entries {
+        let path = worktree.join(&e.name);
+
+        if !path.exists() {
+            println!("\tdeleted:\t{}", e.name);
+        } else {
+            let metadata = fs::metadata(&path)?;
+
+            let ctime_ns = e.ctime.0 * u32::pow(10, 9) * e.ctime.1;
+            let mtime_ns = e.mtime.0 * u32::pow(10, 9) * e.mtime.1;
+
+            if metadata.st_ctime_nsec() != ctime_ns.into()
+                || metadata.st_mtime_nsec() != mtime_ns.into()
+            {
+                let data = fs::read(&path)?;
+                let sha = DeltaRepository::object_hash(data, "blob", false)?;
+
+                if e.sha != sha {
+                    println!("\tmodified:\t{}", e.name);
+                }
+            }
+        }
+
+        let relative_path = fs::canonicalize(path)?
+            .strip_prefix(worktree)?
+            .to_path_buf();
+
+        if let Some(i) = files.iter().position(|p| p == &relative_path) {
+            files.remove(i);
+        }
+    }
+
+    println!("\nUntracked files:");
+
+    for file in files {
+        if has_ignore(&ignore, &file)?.unwrap_or_default() {
+            println!("{}", file.display());
+        }
+    }
+
     Ok(())
 }
