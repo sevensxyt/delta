@@ -10,10 +10,10 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::repo::DeltaRepository;
 
-const STAGE_FLAG_MASK: u16 = 0x3000;
 const NAME_LENGTH_MASK: u16 = 0x0FFF;
 const ASSUME_VALID_FLAG: u16 = 0x8000;
 const EXTENDED_FLAG_MASK: u16 = 0b0000000111111111;
+const STAGE_FLAG_MASK: u16 = 0x3000;
 const MODE_PERMS_MASK: u16 = 0b0000000111111111;
 
 pub struct DeltaIndexEntry {

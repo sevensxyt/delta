@@ -1,8 +1,11 @@
-use std::{collections::HashSet, fs, path::PathBuf};
+use std::{collections::HashSet, fs, os::unix::fs::MetadataExt, path::PathBuf};
 
 use anyhow::{anyhow, Result};
 
-use crate::repo::DeltaRepository;
+use crate::{
+    index::{DeltaIndex, DeltaIndexEntry, ModeType},
+    repo::DeltaRepository,
+};
 
 use super::rm;
 
@@ -20,7 +23,7 @@ fn add_to_index(
 ) -> Result<()> {
     rm(paths)?;
     let worktree = &repo.worktree;
-    let mut clear_paths = HashSet::<PathBuf>::new();
+    let mut clear_paths = HashSet::<(PathBuf, PathBuf)>::new();
 
     for path in paths {
         let absolute_path = fs::canonicalize(path)?;
@@ -31,9 +34,43 @@ fn add_to_index(
             ));
         }
 
-        let relative_path = absolute_path.strip_prefix(worktree)?;
-        clear_paths.insert(relative_path.to_path_buf());
-        clear_paths.insert(absolute_path);
+        let relative_path = absolute_path.strip_prefix(worktree)?.to_path_buf();
+        clear_paths.insert((absolute_path, relative_path));
     }
+
+    let mut index = DeltaIndex::read_index(repo)?;
+
+    for (absolute_path, relative_path) in clear_paths {
+        let data = fs::read(&absolute_path)?;
+        let sha = DeltaRepository::object_hash(data, "blob", false)?;
+
+        let metadata = fs::metadata(&absolute_path)?;
+        let ctime_s = metadata.ctime() as u32;
+        let ctime_ns = (metadata.ctime_nsec() % u32::pow(10, 9) as i64) as u32;
+        let ctime = (ctime_s, ctime_ns);
+
+        let mtime_s = metadata.mtime() as u32;
+        let mtime_ns = (metadata.mtime_nsec() % u32::pow(10, 9) as i64) as u32;
+        let mtime = (mtime_s, mtime_ns);
+
+        let entry = DeltaIndexEntry {
+            ctime,
+            mtime,
+            device_id: metadata.rdev().try_into()?,
+            inode: metadata.ino().try_into()?,
+            mode_type: ModeType::Regular,
+            uid: metadata.uid(),
+            gid: metadata.gid(),
+            mode_perms: 0o644,
+            fsize: metadata.size().try_into()?,
+            sha,
+            assume_valid_flag: false,
+            stage_flag: 0,
+            name: relative_path.display().to_string(),
+        };
+
+        index.entries.push(entry);
+    }
+
     Ok(())
 }
