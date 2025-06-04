@@ -17,7 +17,7 @@ use crate::{
 };
 
 pub fn status() -> Result<()> {
-    let repo = DeltaRepository::repo_find(std::env::current_dir()?)?;
+    let repo = DeltaRepository::find_repo(std::env::current_dir()?)?;
     let index = DeltaIndex::read_index(&repo)?;
 
     branch_status(&repo)?;
@@ -40,7 +40,7 @@ fn branch_status(repo: &DeltaRepository) -> Result<()> {
         println!("On branch {}.", branch);
     } else {
         let sha = repo
-            .object_find("HEAD", None, true)?
+            .find_object("HEAD", None, true)?
             .ok_or_else(|| anyhow!("Error finding object for detached HEAD"))?;
         println!("HEAD detached at {}", sha);
     }
@@ -78,11 +78,11 @@ fn tree_to_dict(
     let mut res = HashMap::<String, String>::new();
 
     let sha = repo
-        .object_find(reference, Some(ObjectFormat::Tree), true)?
+        .find_object(reference, Some(ObjectFormat::Tree), true)?
         .ok_or_else(|| anyhow!("Tree not found for reference {}", reference))?;
 
     let tree = match repo
-        .object_read(&sha)?
+        .read_object(&sha)?
         .ok_or_else(|| anyhow!("Cannot read object with sha {}", sha))?
     {
         DeltaObject::Tree(tree) => tree,
@@ -142,7 +142,7 @@ fn status_index_worktree(repo: &DeltaRepository, index: &DeltaIndex) -> Result<(
                 || metadata.st_mtime_nsec() != mtime_ns.into()
             {
                 let data = fs::read(&path)?;
-                let sha = DeltaRepository::object_hash(data, "blob", false)?;
+                let sha = DeltaRepository::hash_object(data, ObjectFormat::Blob, false)?;
 
                 if e.sha != sha {
                     println!("\tmodified:\t{}", e.name);

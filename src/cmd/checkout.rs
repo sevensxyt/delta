@@ -10,8 +10,8 @@ use crate::{
 
 pub fn checkout(commit: String, path: PathBuf) -> Result<()> {
     let cwd = std::env::current_dir()?;
-    let repo = DeltaRepository::repo_find(cwd)?;
-    let Some(obj) = repo.object_read(&commit)? else {
+    let repo = DeltaRepository::find_repo(cwd)?;
+    let Some(obj) = repo.read_object(&commit)? else {
         return Err(anyhow!("Object with commit '{}' not found", commit));
     };
 
@@ -23,7 +23,7 @@ pub fn checkout(commit: String, path: PathBuf) -> Result<()> {
             .ok_or(anyhow!("Commit {} does not have a tree", commit))?;
 
         let tree_sha = String::from_utf8_lossy(tree_sha);
-        let tree_obj = repo.object_read(&tree_sha)?.context("Tree not found")?;
+        let tree_obj = repo.read_object(&tree_sha)?.context("Tree not found")?;
 
         match tree_obj {
             DeltaObject::Tree(tree) => tree,
@@ -55,7 +55,7 @@ pub fn checkout(commit: String, path: PathBuf) -> Result<()> {
 fn tree_checkout(repo: &DeltaRepository, tree: DeltaTree, path: PathBuf) -> Result<()> {
     for item in tree.items()? {
         let obj = repo
-            .object_read(&item.sha)?
+            .read_object(&item.sha)?
             .ok_or(anyhow!("Cannot find item with sha {}", item.sha))?;
 
         let dest = path.join(item.path);

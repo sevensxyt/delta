@@ -8,7 +8,7 @@ use crate::{
 
 pub fn show_ref() -> Result<()> {
     let cwd = env::current_dir().context("Error getting cwd")?;
-    let repo = DeltaRepository::repo_find(cwd)?;
+    let repo = DeltaRepository::find_repo(cwd)?;
     let refs = ref_list(&repo, None)?;
     display_ref(&refs, true, "refs")?;
     Ok(())

@@ -8,12 +8,12 @@ use crate::{
 };
 
 pub fn rm(path: &Vec<PathBuf>) -> Result<()> {
-    let repo = DeltaRepository::repo_find(std::env::current_dir()?)?;
+    let repo = DeltaRepository::find_repo(std::env::current_dir()?)?;
 
     remove(&repo, path, true, false)
 }
 
-fn remove(
+pub fn remove(
     repo: &DeltaRepository,
     paths: &Vec<PathBuf>,
     delete: bool,

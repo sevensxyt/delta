@@ -13,7 +13,7 @@ use crate::{
 
 pub fn check_ignore(paths: Vec<PathBuf>) -> Result<()> {
     let cwd = std::env::current_dir()?;
-    let repo = DeltaRepository::repo_find(cwd)?;
+    let repo = DeltaRepository::find_repo(cwd)?;
     let rules = DeltaIgnore::deltaignore_read(&repo)?;
 
     for path in paths {

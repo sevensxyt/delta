@@ -11,7 +11,7 @@ use indexmap::IndexMap;
 use crate::repo::DeltaRepository;
 
 pub fn tag(name: Option<String>, object: String, create_tag_object: bool) -> Result<()> {
-    let repo = DeltaRepository::repo_find(std::env::current_dir()?)?;
+    let repo = DeltaRepository::find_repo(std::env::current_dir()?)?;
 
     if let Some(name) = name {
         tag_create(&repo, name, object, create_tag_object)?;
@@ -26,7 +26,7 @@ fn tag_create(
     create_tag_object: bool,
 ) -> Result<()> {
     let sha = repo
-        .object_find(&object, Some(ObjectFormat::Commit), true)?
+        .find_object(&object, Some(ObjectFormat::Commit), true)?
         .ok_or(anyhow!("Object not found"))?;
 
     let sha = if create_tag_object {
@@ -51,7 +51,7 @@ fn tag_create(
         tag.data.insert(key, value);
 
         let tag = DeltaObject::Tag(tag);
-        repo.object_write(&tag)?;
+        repo.write_object(&tag)?;
         let ObjectHash { sha, payload: _ } = DeltaRepository::compute_object_hash(&tag)?;
         sha
     } else {

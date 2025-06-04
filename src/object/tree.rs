@@ -15,7 +15,7 @@ impl DeltaTreeLeaf {
         let mut leaves = vec![];
 
         while offset < raw.len() {
-            let (new_pos, data) = DeltaTreeLeaf::parse_leaf(raw, offset)?;
+            let (new_pos, data) = Self::parse_leaf(raw, offset)?;
             offset = new_pos;
             leaves.push(data);
         }
@@ -65,6 +65,29 @@ impl DeltaTreeLeaf {
         }
         key
     }
+
+    pub fn serialise(&self) -> Result<Vec<u8>> {
+        let mut data = vec![];
+
+        data.extend(self.mode);
+        data.push(b' ');
+
+        let path = self
+            .path
+            .to_str()
+            .ok_or(anyhow!("Invalid UTF-8 path"))?
+            .as_bytes();
+        data.extend(path);
+
+        data.push(b'\x00');
+
+        let sha: [u8; 20] = hex::decode(&self.sha)?
+            .try_into()
+            .map_err(|_| anyhow!("SHA must be 20 bytes"))?;
+        data.extend(&sha);
+
+        Ok(data)
+    }
 }
 
 pub struct DeltaTree {
@@ -80,35 +103,29 @@ impl DeltaTree {
         self.data = data.to_vec();
         Ok(())
     }
+
     pub fn serialise(&self) -> Result<Vec<u8>> {
         let mut leaves = DeltaTreeLeaf::parse_tree(&self.data)?;
         leaves.sort_by_key(DeltaTreeLeaf::tree_leaf_sort_key);
-        let mut res = vec![];
 
-        for leaf in leaves {
-            res.extend(&leaf.mode);
-
-            res.push(b' ');
-
-            let path = leaf
-                .path
-                .to_str()
-                .ok_or(anyhow!("Invalid UTF-8 path"))?
-                .as_bytes();
-            res.extend(path);
-
-            res.push(b'\x00');
-
-            let sha: [u8; 20] = hex::decode(leaf.sha)?
-                .try_into()
-                .map_err(|_| anyhow!("SHA must be 20 bytes"))?;
-            res.extend(&sha);
-        }
-
-        Ok(res)
+        Ok(leaves
+            .iter()
+            .map(|leaf| leaf.serialise())
+            .collect::<Result<Vec<Vec<u8>>>>()?
+            .concat())
     }
 
     pub fn items(&self) -> Result<Vec<DeltaTreeLeaf>> {
         DeltaTreeLeaf::parse_tree(&self.data)
+    }
+
+    pub fn from_leaves(leaves: Vec<DeltaTreeLeaf>) -> Result<Self> {
+        let data = leaves
+            .iter()
+            .map(|leaf| leaf.serialise())
+            .collect::<Result<Vec<Vec<u8>>>>()?
+            .concat();
+
+        Ok(Self { data })
     }
 }

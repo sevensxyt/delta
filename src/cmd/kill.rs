@@ -4,7 +4,7 @@ use crate::repo::DeltaRepository;
 use std::{io, path::PathBuf};
 
 pub fn kill(path: PathBuf) -> Result<()> {
-    let repo = DeltaRepository::repo_find(path)?;
+    let repo = DeltaRepository::find_repo(path)?;
     let deltadir = repo.deltadir.canonicalize().unwrap_or(repo.deltadir);
     let display_path = deltadir
         .parent()

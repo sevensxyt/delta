@@ -112,7 +112,7 @@ impl DeltaRepository {
         }
     }
 
-    pub fn repo_create(&self, path: &Path) -> Result<DeltaRepository> {
+    pub fn create_repo(&self, path: &Path) -> Result<DeltaRepository> {
         let repo = DeltaRepository::new(path, true)?;
 
         if repo.worktree.exists() {
@@ -140,7 +140,7 @@ impl DeltaRepository {
         fs::write(head_path, "ref: refs/heads/master\n")?;
 
         let config_path = repo.repo_file(&["config"], false)?;
-        let config = self.repo_default_config();
+        let config = self.default_config();
         config.write(
             config_path
                 .to_str()
@@ -150,7 +150,7 @@ impl DeltaRepository {
         Ok(repo)
     }
 
-    pub fn repo_default_config(&self) -> Ini {
+    pub fn default_config(&self) -> Ini {
         let mut config = Ini::new();
 
         config.setstr("core", "repositoryformatversion", Some("0"));
@@ -160,7 +160,7 @@ impl DeltaRepository {
         config
     }
 
-    pub fn repo_find_optional(path: PathBuf) -> Result<Option<Self>> {
+    pub fn find_repo_optional(path: PathBuf) -> Result<Option<Self>> {
         let path = path
             .canonicalize()
             .context(format!("No such file exists {}", path.display()))?;
@@ -174,14 +174,14 @@ impl DeltaRepository {
             .map(Path::to_path_buf)
             .ok_or_else(|| anyhow!("No delta directory found"))?;
 
-        Self::repo_find_optional(parent)
+        Self::find_repo_optional(parent)
     }
 
-    pub fn repo_find(path: PathBuf) -> Result<Self> {
-        Self::repo_find_optional(path)?.ok_or_else(|| anyhow!("No delta repository found"))
+    pub fn find_repo(path: PathBuf) -> Result<Self> {
+        Self::find_repo_optional(path)?.ok_or_else(|| anyhow!("No delta repository found"))
     }
 
-    pub fn object_read(&self, sha: &str) -> Result<Option<DeltaObject>> {
+    pub fn read_object(&self, sha: &str) -> Result<Option<DeltaObject>> {
         let path = self.repo_file(&["objects", &sha[0..2], &sha[2..]], false)?;
 
         if !path.is_file() {
@@ -226,28 +226,14 @@ impl DeltaRepository {
         Ok(Some(object))
     }
 
-    pub fn object_write(&self, object: &DeltaObject) -> Result<()> {
-        let ObjectHash { sha, payload } = Self::compute_object_hash(object)?;
-        let path = self.repo_file(&["objects", &sha[0..2], &sha[2..]], true)?;
-        if !path.exists() {
-            let mut buffer = Vec::new();
-            let mut z = ZlibEncoder::new(&mut buffer, Compression::default());
-            z.write_all(&payload)?;
-            z.finish()?;
-            std::fs::write(path, buffer)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn object_find(
+    pub fn find_object(
         &self,
         name: &str,
         format: Option<ObjectFormat>,
         follow: bool,
     ) -> Result<Option<String>> {
         let sha = self
-            .object_resolve(name)?
+            .resolve_object(name)?
             .context(anyhow!("No such reference {}", name))?;
 
         if sha.len() > 1 {
@@ -266,7 +252,7 @@ impl DeltaRepository {
 
         if let Some(format) = format {
             loop {
-                let Some(obj) = self.object_read(&sha)? else {
+                let Some(obj) = self.read_object(&sha)? else {
                     return Err(anyhow!("No object found with sha {}", sha));
                 };
 
@@ -307,7 +293,7 @@ impl DeltaRepository {
         }
     }
 
-    pub fn object_resolve(&self, name: &str) -> Result<Option<Vec<String>>> {
+    pub fn resolve_object(&self, name: &str) -> Result<Option<Vec<String>>> {
         if name.is_empty() {
             return Ok(None);
         }
@@ -354,24 +340,40 @@ impl DeltaRepository {
         Ok(Some(candidates))
     }
 
-    pub fn object_hash(data: Vec<u8>, format: &str, write: bool) -> Result<String> {
+    pub fn hash_object(data: Vec<u8>, format: ObjectFormat, write: bool) -> Result<String> {
         let object = match format {
-            "blob" => DeltaObject::Blob(DeltaBlob { data }),
-            "commit" => DeltaObject::Commit(DeltaCommit {
+            ObjectFormat::Blob => DeltaObject::Blob(DeltaBlob { data }),
+            ObjectFormat::Commit => DeltaObject::Commit(DeltaCommit {
                 data: kvlm_parse(&data)?,
             }),
-            "tag" => DeltaObject::Tag(DeltaTag {
+            ObjectFormat::Tag => DeltaObject::Tag(DeltaTag {
                 data: kvlm_parse(&data)?,
             }),
-            "tree" => DeltaObject::Tree(DeltaTree { data }),
-            _ => return Err(anyhow!("Invalid format")),
+            ObjectFormat::Tree => DeltaObject::Tree(DeltaTree { data }),
         };
         let ObjectHash { sha, payload: _ } = Self::compute_object_hash(&object)?;
 
         if write {
-            let cwd = std::env::current_dir()?;
-            let repo = Self::repo_find(cwd)?;
-            repo.object_write(&object)?;
+            std::env::current_dir()
+                .map_err(Into::into)
+                .and_then(Self::find_repo)
+                .and_then(|repo| repo.write_object(&object))?;
+        }
+
+        Ok(sha)
+    }
+
+    pub fn write_object(&self, object: &DeltaObject) -> Result<String> {
+        let ObjectHash { sha, payload } = Self::compute_object_hash(object)?;
+        let (group, id) = sha.split_at(2);
+
+        let path = self.repo_file(&["objects", group, id], true)?;
+        if !path.exists() {
+            let mut buffer = Vec::new();
+            let mut z = ZlibEncoder::new(&mut buffer, Compression::default());
+            z.write_all(&payload)?;
+            z.finish()?;
+            std::fs::write(path, buffer)?;
         }
 
         Ok(sha)

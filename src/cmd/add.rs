@@ -4,15 +4,16 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     index::{DeltaIndex, DeltaIndexEntry, ModeType},
+    object::ObjectFormat,
     repo::DeltaRepository,
 };
 
-use super::rm;
+use super::rm::remove;
 
 pub fn add(path: Vec<PathBuf>) -> Result<()> {
-    let repo = DeltaRepository::repo_find(std::env::current_dir()?)?;
+    let repo = DeltaRepository::find_repo(std::env::current_dir()?)?;
 
-    add_to_index(&repo, &path, true, false)
+    add_to_index(&repo, &path, false, true)
 }
 
 fn add_to_index(
@@ -21,7 +22,7 @@ fn add_to_index(
     delete: bool,
     skip_missing: bool,
 ) -> Result<()> {
-    rm(paths)?;
+    remove(repo, paths, delete, skip_missing)?;
     let worktree = &repo.worktree;
     let mut clear_paths = HashSet::<(PathBuf, PathBuf)>::new();
 
@@ -42,7 +43,7 @@ fn add_to_index(
 
     for (absolute_path, relative_path) in clear_paths {
         let data = fs::read(&absolute_path)?;
-        let sha = DeltaRepository::object_hash(data, "blob", false)?;
+        let sha = DeltaRepository::hash_object(data, ObjectFormat::Blob, true)?;
 
         let metadata = fs::metadata(&absolute_path)?;
         let ctime_s = metadata.ctime() as u32;

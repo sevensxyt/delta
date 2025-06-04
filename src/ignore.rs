@@ -52,7 +52,7 @@ impl DeltaIgnore {
                     .and_then(|p| p.to_str())
                     .unwrap_or_default();
                 let obj = repo
-                    .object_read(&e.sha)?
+                    .read_object(&e.sha)?
                     .ok_or(anyhow!("Object with sha {} not found", e.sha))?;
 
                 if let DeltaObject::Blob(blob) = obj {

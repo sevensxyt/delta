@@ -16,6 +16,7 @@ const EXTENDED_FLAG_MASK: u16 = 0b0000000111111111;
 const STAGE_FLAG_MASK: u16 = 0x3000;
 const MODE_PERMS_MASK: u16 = 0b0000000111111111;
 
+#[derive(Clone)]
 pub struct DeltaIndexEntry {
     pub ctime: (u32, u32),
     pub mtime: (u32, u32),
@@ -54,6 +55,7 @@ impl Default for DeltaIndex {
     }
 }
 
+#[derive(Clone)]
 pub enum ModeType {
     Regular,
     Symlink,
@@ -72,7 +74,7 @@ impl ModeType {
         Ok(mode_type)
     }
 
-    fn to_bytes(&self) -> u8 {
+    pub fn to_bytes(&self) -> u8 {
         match self {
             Self::Regular => 0b1000,
             Self::Symlink => 0b1010,

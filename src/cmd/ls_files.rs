@@ -6,7 +6,7 @@ use users::{get_group_by_gid, get_user_by_uid};
 
 pub fn ls_files(verbose: bool) -> Result<()> {
     let cwd = std::env::current_dir()?;
-    let repo = DeltaRepository::repo_find(cwd)?;
+    let repo = DeltaRepository::find_repo(cwd)?;
     let DeltaIndex { version, entries } = DeltaIndex::read_index(&repo)?;
 
     if verbose {

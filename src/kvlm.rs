@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
 
@@ -5,6 +7,8 @@ pub enum KvlmKey {
     Message,
     Parent,
     Tree,
+    Author,
+    Committer,
 }
 
 impl KvlmKey {
@@ -13,7 +17,15 @@ impl KvlmKey {
             Self::Message => "",
             Self::Parent => "parent",
             Self::Tree => "tree",
+            Self::Author => "author",
+            Self::Committer => "committer",
         }
+    }
+}
+
+impl Display for KvlmKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 

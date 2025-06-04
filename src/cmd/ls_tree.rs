@@ -6,7 +6,7 @@ use crate::object::{DeltaObject, ObjectFormat};
 use crate::repo::DeltaRepository;
 
 pub fn ls_tree(tree: String, recursive: bool) -> Result<()> {
-    let repo = DeltaRepository::repo_find(std::env::current_dir()?)?;
+    let repo = DeltaRepository::find_repo(std::env::current_dir()?)?;
     recurse(&repo, &tree, recursive, PathBuf::from(String::new()))?;
 
     Ok(())
@@ -14,9 +14,9 @@ pub fn ls_tree(tree: String, recursive: bool) -> Result<()> {
 
 fn recurse(repo: &DeltaRepository, tree: &str, recursive: bool, prefix: PathBuf) -> Result<()> {
     let sha = repo
-        .object_find(tree, Some(ObjectFormat::Tree), true)?
+        .find_object(tree, Some(ObjectFormat::Tree), true)?
         .ok_or(anyhow!("Object not found"))?;
-    let obj = repo.object_read(&sha)?.context("Error: Object not found")?;
+    let obj = repo.read_object(&sha)?.context("Error: Object not found")?;
 
     let DeltaObject::Tree(obj) = obj else {
         return Err(anyhow!("Object is not a tree"));

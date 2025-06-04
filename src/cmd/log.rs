@@ -6,9 +6,9 @@ use crate::repo::DeltaRepository;
 use std::{collections::HashSet, env};
 
 pub fn log(commit: String) -> Result<()> {
-    let repo = DeltaRepository::repo_find(env::current_dir()?)?;
+    let repo = DeltaRepository::find_repo(env::current_dir()?)?;
     let object = repo
-        .object_find(&commit, Some(ObjectFormat::Commit), true)?
+        .find_object(&commit, Some(ObjectFormat::Commit), true)?
         .ok_or(anyhow!("Commit {} not found", commit))?;
     log_graph(&repo, object);
     Ok(())
@@ -20,7 +20,7 @@ fn log_graph(repo: &DeltaRepository, sha: String) {
             return Ok(());
         }
 
-        let object = repo.object_read(sha)?.ok_or(anyhow!("Object not found"))?;
+        let object = repo.read_object(sha)?.ok_or(anyhow!("Object not found"))?;
         let commit: DeltaCommit = object.try_into()?;
         let message = commit
             .data

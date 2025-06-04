@@ -24,10 +24,10 @@ pub enum Command {
         path: Vec<PathBuf>,
     },
     CatFile {
-        #[arg(name = "type", help = "Specify the type", value_parser = ["blob", "commit", "tag", "tree"])]
+        #[arg(help = "Specify the type", value_parser = ["blob", "commit", "tag", "tree"])]
         format: String,
 
-        #[arg(name = "object", help = "The object to display")]
+        #[arg(help = "The object to display")]
         object: String,
     },
     #[command(about = "Check path(s) against ignore rules")]
@@ -43,7 +43,11 @@ pub enum Command {
         #[arg(help = "The EMPTY directory to checkout on")]
         path: PathBuf,
     },
-    Commit,
+    #[command(about = "Record changes to the repository")]
+    Commit {
+        #[arg(short = 'm', help = "Message to associate with this commit")]
+        message: String,
+    },
     HashObject {
         path: PathBuf,
 
@@ -116,7 +120,7 @@ pub fn main() -> Result<()> {
         Command::CatFile { object, format } => cmd::cat_file(object, format)?,
         Command::CheckIgnore { paths } => cmd::check_ignore(paths)?,
         Command::Checkout { commit, path } => cmd::checkout(commit, path)?,
-        Command::Commit => cmd::commit(),
+        Command::Commit { message } => cmd::commit(message)?,
         Command::HashObject {
             path,
             format,
